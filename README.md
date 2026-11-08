@@ -1,14 +1,14 @@
 # SlskME
 
-A Soulseek client for old Java phones. Pure J2ME (CLDC 1.1 / MIDP 2.0 + JSR-75 FileConnection),
+A Soulseek client for old Java phones. J2ME (CLDC 1.1 / MIDP 2.0 + JSR-75 FileConnection),
 no proxy server, talks to the real Soulseek network directly.
 
 Aimed at Nokia S60v3/v5 (N82, C6-00...), Nokia S40 with JSR-75, and Windows Mobile 6 Java runtimes.
-The jar is about 38 KB.
+The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see about that later.
 
 ## Features
 
-- Log in to `server.slsknet.org:2242` (unknown names are registered on first login)
+- Log in to `server.slsknet.org:2242` (unknown names are registered on first login like usual)
 - Search, results arrive live, free slots sorted first, bitrate/length/queue/speed in Details
 - Download to the memory card, resume after a dropped connection, queue position, retry
 - Works on mobile data with no open port: peers are reached through the server's firewall-piercing
@@ -19,7 +19,7 @@ The jar is about 38 KB.
 - Each download keeps a step trace (open Details) so failures say exactly where they broke
 
 Not implemented yet: sharing/uploads, chat rooms, private messages, browsing users, wishlist.
-Because it shares nothing, some users deny downloads.
+You will be blocked by users who do not like downloaders without shares for now. 
 
 ## Install
 
