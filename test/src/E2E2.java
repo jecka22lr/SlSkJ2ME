@@ -2,7 +2,7 @@ package slsk;
 import java.util.Vector;
 public class E2E2 implements Client.Listener {
   volatile boolean in; volatile int ok;
-  volatile Object browse; volatile UserInfo info; volatile int wish, roomMsgs; volatile boolean pm, upDone;
+  volatile Object browse; volatile UserInfo info; volatile int wish, roomMsgs; volatile boolean pm, upDone, reconnected;
   public void loggedIn(boolean o, String m) { in = o; }
   public void disconnected(String w) { System.out.println("UI disconnected " + w); }
   public void result(Result r) {}
@@ -16,6 +16,7 @@ public class E2E2 implements Client.Listener {
       case Client.EV_BROWSE: browse = b; break;
       case Client.EV_WISH: wish++; System.out.println("UI wish " + ((Result) a).file); break;
       case Client.EV_UPLOAD: Upload u = (Upload) a; System.out.println("UI upload " + u.label() + " " + u.info); if (u.state == Upload.DONE) upDone = true; break;
+      case Client.EV_CONN: System.out.println("UI conn " + a); if ("Reconnected".equals(a)) reconnected = true; break;
       case Client.EV_ROOMLIST: System.out.println("UI rooms " + ((Client) null == null ? "" : "")); break;
     }
   }
@@ -49,6 +50,12 @@ public class E2E2 implements Client.Listener {
     System.out.println("E2E2 ok browse parse");
     System.out.println("scanned " + c.scanShares("file:///E:/Share/"));
     waitFor(() -> ui.upDone, "upload to searcher");
+    c.say("nokia", "drop me");
+    long until = System.currentTimeMillis() + 20000;
+    while (!ui.reconnected && System.currentTimeMillis() < until) Thread.sleep(100);
+    if (!ui.reconnected) throw new Error("no reconnect");
+    System.out.println("E2E2 ok reconnect");
+    Thread.sleep(1500);
     Thread.sleep(500);
     System.exit(0);
   }

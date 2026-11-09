@@ -6,5 +6,7 @@ MIDlet-Version: @VERSION@
 MIDlet-Icon: /icon.png
 MIDlet-Description: Soulseek client for J2ME
 MIDlet-Permissions-Opt: javax.microedition.io.Connector.socket, javax.microedition.io.Connector.serversocket, javax.microedition.io.Connector.file.read, javax.microedition.io.Connector.file.write
+Nokia-MIDlet-Category: Application
+Nokia-MIDlet-On-Screen-Keypad: no
 MicroEdition-Configuration: CLDC-1.1
 MicroEdition-Profile: MIDP-2.0

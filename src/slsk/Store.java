@@ -78,7 +78,7 @@ final class Store {
         }
     }
 
-    private static final String[] PROPS = { "fileconn.dir.music", "fileconn.dir.memorycard",
+    private static final String[] PROPS = { "fileconn.dir.memorycard", "fileconn.dir.music",
         "fileconn.dir.recordings", "fileconn.dir.tones", "fileconn.dir.videos", "fileconn.dir.photos",
         "fileconn.dir.graphics", "fileconn.dir.private" };
 
@@ -121,6 +121,38 @@ final class Store {
         return null;
     }
 
+    private static String prop(String k) {
+        try {
+            String p = System.getProperty(k);
+            if (p == null || p.length() == 0) return null;
+            return p.endsWith("/") ? p : p + "/";
+        } catch (Throwable e) { return null; }
+    }
+
+    private static final String[][] NAMES = {
+        { "fileconn.dir.memorycard", "Memory card" }, { "fileconn.dir.music", "Music" },
+        { "fileconn.dir.recordings", "Recordings" }, { "fileconn.dir.tones", "Tones" },
+        { "fileconn.dir.videos", "Videos" }, { "fileconn.dir.photos", "Images" },
+        { "fileconn.dir.graphics", "Graphics" }, { "fileconn.dir.private", "App private folder" } };
+
+    /** "Memory card/Soulseek/" instead of "file:///E:/Soulseek/" where we can tell. */
+    static String friendly(String url) {
+        String best = null, rest = null;
+        int bestLen = 0;
+        for (int i = 0; i < NAMES.length; i++) {
+            String p = prop(NAMES[i][0]);
+            if (p != null && url.startsWith(p) && p.length() > bestLen) {
+                best = NAMES[i][1]; rest = url.substring(p.length()); bestLen = p.length();
+            }
+        }
+        if (best == null) {
+            String u = url.toUpperCase();
+            if (u.startsWith("FILE:///C:/")) { best = "Phone memory"; rest = url.substring(11); }
+            else return Util.decodeUrl(url.startsWith("file:///") ? url.substring(8) : url);
+        }
+        return best + (rest.length() > 0 ? "/" + Util.decodeUrl(rest) : "");
+    }
+
     static String fallbackDir() {
         try {
             String m = System.getProperty("fileconn.dir.music");
@@ -157,6 +189,9 @@ final class Store {
 
     /** Best guess for a download folder: memory card first. */
     static String defaultDir() {
+        // Nokia (S60, S40) and most JSR-75 phones say where the memory card is
+        String card = prop("fileconn.dir.memorycard");
+        if (card != null) return card + "Soulseek/";
         try {
             String best = null;
             Enumeration e = FileSystemRegistry.listRoots();

@@ -25,7 +25,7 @@ public final class Client implements Runnable {
     }
 
     public static final int EV_ROOMLIST = 1, EV_ROOM = 2, EV_ROOMMSG = 3, EV_PM = 4, EV_USERINFO = 5,
-        EV_BROWSE = 6, EV_WISH = 7, EV_SHARES = 8, EV_UPLOAD = 9;
+        EV_BROWSE = 6, EV_WISH = 7, EV_SHARES = 8, EV_UPLOAD = 9, EV_CONN = 10;
 
     static final int VERSION = 160, MINOR = 1;
 
@@ -102,15 +102,39 @@ public final class Client implements Runnable {
 
     public void connect() { new Thread(this).start(); }
 
+    private volatile boolean everOnline;
+    private volatile int gen; // bumps on every successful login; old helper threads exit
+
+    /** Connects, and after the first successful login keeps reconnecting until logout. */
     public void run() {
-        String why = "Disconnected";
+        int delay = 5;
+        while (true) {
+            String why = session();
+            boolean was = online;
+            shutdown();
+            if (stopping) return;
+            if (!everOnline) {
+                ui.loggedIn(false, "Can't connect: " + why);
+                return;
+            }
+            if (was) delay = 5;
+            ui.event(EV_CONN, "Connection lost (" + why + "), reconnecting in " + delay + " s", null);
+            for (int i = 0; i < delay * 10 && !stopping; i++) {
+                try { Thread.sleep(100); } catch (InterruptedException e) {}
+            }
+            if (stopping) return;
+            delay = Math.min(delay * 2, 120);
+        }
+    }
+
+    private String session() {
         try {
             try {
                 ssc = (StreamConnection) Connector.open("socket://" + host + ":" + port, Connector.READ_WRITE, true);
             } catch (SecurityException e) {
                 throw new IOException("phone denied network permission");
             }
-            if (stopping) { try { ssc.close(); } catch (Throwable e) {} return; }
+            if (stopping) return "cancelled";
             try { ((SocketConnection) ssc).setSocketOption(SocketConnection.KEEPALIVE, 1); } catch (Throwable e) {}
             sin = ssc.openDataInputStream();
             sout = ssc.openOutputStream();
@@ -132,14 +156,9 @@ public final class Client implements Runnable {
                     log("Out of memory on server msg " + code);
                 }
             }
+            return "logged out";
         } catch (Throwable e) {
-            why = e.getMessage() == null ? e.toString() : e.getMessage();
-        }
-        boolean was = online;
-        shutdown();
-        if (!stopping) {
-            if (was) ui.disconnected(why);
-            else ui.loggedIn(false, "Can't connect: " + why);
+            return e.getMessage() == null ? e.toString() : e.getMessage();
         }
     }
 
@@ -173,7 +192,13 @@ public final class Client implements Runnable {
             if (stopping) return;
             online = true;
             afterLogin();
-            ui.loggedIn(true, greet);
+            if (!everOnline) {
+                everOnline = true;
+                ui.loggedIn(true, greet);
+            } else {
+                afterReconnect();
+                ui.event(EV_CONN, "Reconnected", null);
+            }
             break;
         }
         case 3: { // GetPeerAddress
@@ -210,7 +235,9 @@ public final class Client implements Runnable {
         }
         case 14: { // JoinRoom
             String room = r.str();
-            Room rm = new Room(room);
+            Room rm = (Room) rooms.get(room);
+            if (rm == null) rm = new Room(room);
+            rm.users.removeAllElements();
             int n = r.u32();
             for (int i = 0; i < n; i++) rm.users.addElement(r.str());
             rooms.put(room, rm);
@@ -313,7 +340,26 @@ public final class Client implements Runnable {
         return "Login failed: " + r;
     }
 
+    /** After a reconnect: rejoin rooms and re-send queued download requests. */
+    private void afterReconnect() {
+        Enumeration e = rooms.keys();
+        while (e.hasMoreElements()) joinRoom((String) e.nextElement());
+        Vector v = new Vector();
+        synchronized (transfers) {
+            for (int i = 0; i < transfers.size(); i++) v.addElement(transfers.elementAt(i));
+        }
+        for (int i = 0; i < v.size(); i++) {
+            Transfer t = (Transfer) v.elementAt(i);
+            if (t.state == Transfer.QUEUED || t.state == Transfer.CONNECTING) {
+                t.state = Transfer.FAILED; // let queue() run again
+                queue(t);
+            }
+        }
+    }
+
     private void afterLogin() {
+        final int g = ++gen;
+        wishInterval = 0;
         if (listenPort > 0) {
             try {
                 listener = (ServerSocketConnection) Connector.open("socket://:" + listenPort);
@@ -333,15 +379,15 @@ public final class Client implements Runnable {
         trySend(100, new Msg().bool(false));                        // AcceptChildren: no
         new Thread(new Runnable() {
             public void run() {
-                while (online && !stopping) {
+                while (online && !stopping && g == gen) {
                     try { Thread.sleep(90000); } catch (InterruptedException e) {}
-                    if (online) trySend(32, new Msg()); // ServerPing keeps NAT alive
+                    if (online && g == gen) trySend(32, new Msg()); // ServerPing keeps NAT alive
                 }
             }
         }).start();
         new Thread(new Runnable() {
             public void run() {
-                while (online && !stopping) {
+                while (online && !stopping && g == gen) {
                     try { Thread.sleep(10000); } catch (InterruptedException e) {}
                     reapIdlePeers();
                     checkUploads();
@@ -474,9 +520,10 @@ public final class Client implements Runnable {
         boolean first = wishInterval == 0;
         wishInterval = Math.max(secs, 60);
         if (!first) return;
+        final int g = gen;
         new Thread(new Runnable() {
             public void run() {
-                while (online && !stopping) {
+                while (online && !stopping && g == gen) {
                     wishSearchNext();
                     try { Thread.sleep(wishInterval * 1000L); } catch (InterruptedException e) {}
                 }
@@ -1118,6 +1165,17 @@ public final class Client implements Runnable {
             }
         }
         return null;
+    }
+
+    /** Put back a download saved from a previous run. Unfinished ones get re-queued after login. */
+    public Transfer restore(String user, String file, long size, boolean done) {
+        Transfer t = transferByFile(user, file);
+        if (t != null) return t;
+        t = new Transfer(user, file, size);
+        t.state = done ? Transfer.DONE : Transfer.FAILED;
+        t.info = done ? "Saved" : "Restored from last session";
+        transfers.addElement(t);
+        return t;
     }
 
     public Transfer download(Result r) {

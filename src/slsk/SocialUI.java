@@ -35,8 +35,8 @@ final class SocialUI implements CommandListener {
     private final Command cRefresh = new Command("Refresh", Command.SCREEN, 3);
     private final Command cNewPm = new Command("New message", Command.SCREEN, 2);
     private final Command cProfile = new Command("User", Command.SCREEN, 2);
-    private final Command cGet = new Command("Download", Command.ITEM, 1);
-    private final Command cGetAll = new Command("Download folder", Command.SCREEN, 2);
+    private final Command cGet = new Command("Download file", Command.ITEM, 1);
+    private final Command cGetAll = new Command("Download whole folder", Command.SCREEN, 2);
     private final Command cInfo = new Command("Details", Command.ITEM, 3);
     private final Command cAdd = new Command("Add", Command.SCREEN, 2);
     private final Command cRemove = new Command("Remove", Command.ITEM, 3);
@@ -604,7 +604,7 @@ final class SocialUI implements CommandListener {
             } else if (c == cGetAll && arr != null) {
                 for (int k = 0; k < arr.length; k++) cl.download(arr[k]);
                 for (int k = 0; k < arr.length; k++) filesL.set(k, m.resultLabel(arr[k]), null);
-                m.alert("Download folder", "Queued " + arr.length + " files", filesL);
+                m.alert("Download whole folder", "Queued " + arr.length + " files", filesL);
             } else if (c == cInfo && r != null) m.showInfo("File", r.details(), s);
             else if (c == cProfile && r != null) showUser(r.user, s);
         } else if (s == wishL) {

@@ -37,6 +37,7 @@ def server(c):
         code, p = rmsg(c)
         if code == 1:
             c.sendall(frame(1, b'\x01' + s('hi') + LO + s('x') + b'\x00'))
+            if st.get('dropped'): ok('reconnect_login'); continue
             c.sendall(frame(64, struct.pack('<I', 3) + s('nokia') + s('j2me') + s('music') + struct.pack('<IIII', 3, 12, 40, 7)))
             c.sendall(frame(104, struct.pack('<I', 2)))   # wishlist every 2 s (client clamps to 60, first runs now)
             c.sendall(frame(22, struct.pack('<II', 42, 0) + s('peer1') + s('hey, got any symbian stuff?') + b'\x01'))
@@ -50,10 +51,14 @@ def server(c):
                 c.sendall(frame(102, struct.pack('<I', 1) + s('parent') + LO + struct.pack('<I', PARENT)))
         elif code == 14:
             room, _ = rstr(p, 0)
+            if st.get('dropped'): ok('reconnect_rejoin', room == 'nokia')
             c.sendall(frame(14, s(room) + struct.pack('<I', 2) + s('peer1') + s('jecka')))
             c.sendall(frame(13, s(room) + s('peer1') + s('welcome to ' + room)))
         elif code == 13:
-            room, o = rstr(p, 0); msg, _ = rstr(p, o); ok('room_say', msg == 'hello room')
+            room, o = rstr(p, 0); msg, _ = rstr(p, o)
+            if msg == 'drop me':
+                st['dropped'] = True; print('SERVER dropping client', flush=True); c.close(); return
+            ok('room_say', msg == 'hello room')
             c.sendall(frame(13, s(room) + s('jecka') + s(msg)))
         elif code == 22:
             u, o = rstr(p, 0); msg, _ = rstr(p, o); ok('pm_sent', u == 'peer1' and msg == 'yes, j2me stuff')
@@ -140,8 +145,12 @@ def searcher(c):  # stranger: receives our search result, browses us, asks profi
 
 listen(PEER, peer1); listen(PARENT, parent); listen(SEARCHER, searcher)
 ls = socket.socket(); ls.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); ls.bind(('127.0.0.1', SRV)); ls.listen()
-threading.Thread(target=lambda: server(ls.accept()[0]), daemon=True).start()
-need = ['pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
+def accept_loop():
+    while True:
+        cc = ls.accept()[0]
+        threading.Thread(target=server, args=(cc,), daemon=True).start()
+threading.Thread(target=accept_loop, daemon=True).start()
+need = ['reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
 t0 = time.time()
 while time.time() - t0 < float(sys.argv[1]) and not all(k in checks for k in need): time.sleep(0.2)
 missing = [k for k in need if k not in checks]

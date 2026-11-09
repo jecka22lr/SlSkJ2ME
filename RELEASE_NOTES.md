@@ -1,18 +1,13 @@
-The big one: SlskME is now a proper Soulseek client instead of a download tool.
+Polish release before the wider test.
 
-**New in Alpha 0.2.0**
-- Sharing and uploads: pick a folder in **Profile & sharing**, and people can find, browse and download your files
-- Search network: your shared files show up in other people's searches
-- Chat rooms: browse the room list, join, chat, see who's there
-- Private messages, with a vibrate and ticker when one arrives
-- User menu from results, rooms or messages (or **Find user**): profile with picture, browse their files, search their files, message them
-- Browse anyone's shares and download single files or whole folders
-- Wishlist: saved searches that keep running in the background
+**New in Alpha 0.3.0**
+- Reconnects by itself when the connection drops (mobile data, tunnels, switching networks), rejoins your rooms and picks the download queue back up
+- Your download list survives closing the app: unfinished downloads resume after you log in again
+- Exit asks first if anything is still transferring
+- Finds the memory card using the phone's own setting, and shows folders as "Memory card/Soulseek/" instead of file:/// paths
+- While a search is running the list says "Searching...", then "No results yet (still listening)", instead of the phone's "No results"
+- Less confusing names: **Download file** (on a result) vs **My downloads** (the list), **Save location** (where files go) vs **Download whole folder** (when browsing)
 
 **Install:** copy `SlskME.jar` to the phone and open it (or use the `.jad` for OTA). Uninstall the previous version first.
 
-**Notes**
-- Uploads go out to people with an open port. On mobile data your phone can't accept incoming connections, so downloaders who are also firewalled can't get files from you (same limit every Soulseek client has).
-- Big share lists may not fit in phone memory when browsing. If so, use "Search their files" instead.
-- Sharing scans up to 1500 files.
-- Unsigned build: expect permission prompts. If file access is refused, use **Download folder** in the menu.
+Unsigned build: expect permission prompts. If file access is refused, open **Save location** in the menu and pick one marked OK.

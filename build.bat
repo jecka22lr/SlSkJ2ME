@@ -36,6 +36,8 @@ for %%A in (dist\SlskME.jar) do set SIZE=%%~zA
   echo MIDlet-Jar-URL: SlskME.jar
   echo MIDlet-Jar-Size: %SIZE%
   echo MIDlet-Permissions-Opt: javax.microedition.io.Connector.socket, javax.microedition.io.Connector.serversocket, javax.microedition.io.Connector.file.read, javax.microedition.io.Connector.file.write
+  echo Nokia-MIDlet-Category: Application
+  echo Nokia-MIDlet-On-Screen-Keypad: no
   echo MicroEdition-Configuration: CLDC-1.1
   echo MicroEdition-Profile: MIDP-2.0
 ) > dist\SlskME.jad

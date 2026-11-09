@@ -1,5 +1,18 @@
 # Changelog
 
+## Alpha 0.3.0
+
+- Auto-reconnect: a dropped connection retries by itself (5 s, doubling up to 2 min),
+  rejoins your chat rooms and re-sends queued download requests
+- Download list survives restarts; unfinished downloads re-queue and resume after login
+- Exit asks first while downloads or uploads are running
+- Memory card found via the phone's own setting; folders shown as "Memory card/...",
+  "Phone memory/...", "Music/..." instead of raw paths
+- Results list says "Searching... N s", then "No results yet (still listening)",
+  instead of the phone's misleading "No results"
+- Clearer names: "Download file" vs "My downloads", "Save location" vs "Download whole folder"
+- Nokia JAD attributes (application category, no on-screen keypad on touch S60)
+
 ## Alpha 0.2.2
 
 - Search results are paged, 100 per page (Next page / Previous page). Title shows p2/7.
