@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- Fixed: no preview showed in Chat look or the colour picker on the C6-00 (the phone hides image
+  items in forms). Both now have a live preview drawn by the app: a mini chat with your settings at
+  the top of Chat look, and a sample in the colour picker that follows the sliders
+- License changed from MIT to GPL-3.0-or-later (1.0 and earlier stay MIT)
+
 ## 1.0.0
 
 - Chat rooms and private messages use a new view that always opens at the newest message and stays
@@ -17,8 +24,6 @@
   - Background: phone theme, a colour (sliders with preview, or type RRGGBB), or an image from the
     phone that fills (crops), stretches or tiles, with adjustable dimming toward darker/lighter/auto
   - Name colours are nudged lighter or darker when they'd be hard to read on the background
-  - Live preview at the top of Chat look and in the colour picker (drawn by the app, so it shows on
-    phones that hide image items in forms)
   - Optional box behind each message, with adjustable opacity (0% = off to 100% = solid), so busy
     backgrounds don't get in the way of the text
   - Background pictures over about 2 megapixels are refused up front (read from the file header,
@@ -29,7 +34,6 @@
   and then fail with "File not shared"
 - My downloads > Retry restarts the automatic retries from zero
 - No longer a beta: the About screen just says the version
-- License changed from MIT to GPL-3.0-or-later
 
 ## Beta 0.5.0
 
