@@ -1,5 +1,15 @@
 # Changelog
 
+## Alpha 0.4.0
+
+- Search results regrouped like desktop clients: user (free slot / queue, speed),
+  then each folder, then its files with size, bitrate and length
+- Small icons for user, folder and file rows
+- Select a user row to open their user menu, a folder row to download the whole folder
+  (asks first), a file row to download it; Details works on folders too
+- Free-slot users first, then fastest; paging repeats the user/folder header when a page
+  starts mid-group (80 rows per page)
+
 ## Alpha 0.3.2
 
 - Testing a save location no longer leaves empty "Soulseek" folders behind

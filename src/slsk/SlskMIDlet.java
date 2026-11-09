@@ -15,6 +15,8 @@ import javax.microedition.lcdui.CommandListener;
 import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
+import javax.microedition.lcdui.Graphics;
+import javax.microedition.lcdui.Image;
 import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.StringItem;
 import javax.microedition.lcdui.TextBox;
@@ -35,7 +37,6 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private TextBox searchTB;
     private Form logF, infoF;
     private Displayable infoBack;
-    private final Vector shown = new Vector();   // Results in resL order
     private final Vector shownDl = new Vector(); // Transfers in dlL order
     private Timer timer;
     private String lastQuery = "";
@@ -45,7 +46,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private final Command cLogin = new Command("Log in", Command.OK, 1);
     private final Command cBack = new Command("Back", Command.BACK, 2);
     private final Command cGo = new Command("Search", Command.OK, 1);
-    private final Command cGet = new Command("Download file", Command.ITEM, 1);
+    private final Command cGet = new Command("Download / open", Command.ITEM, 1);
     private final Command cInfo = new Command("Details", Command.ITEM, 2);
     private final Command cNew = new Command("New search", Command.SCREEN, 3);
     private final Command cRetry = new Command("Retry", Command.ITEM, 2);
@@ -67,13 +68,15 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private final Command cExitNow = new Command("Exit anyway", Command.OK, 1);
     private final Command cStay = new Command("Stay", Command.CANCEL, 2);
     private final Command cBrowse = new Command("Browse folders", Command.SCREEN, 2);
+    private final Command cDirYes = new Command("Download all", Command.OK, 1);
+    private final Command cDirNo = new Command("Cancel", Command.CANCEL, 2);
     private final Command cFilter = new Command("Filter", Command.SCREEN, 2);
     private static final String[] FILTERS = { "All files", "MP3 only", "FLAC only", "Lossy (mp3/ogg/m4a/opus...)",
         "Lossless (flac/wav/ape/alac)", "Free slots only" };
     private int filter;
     private List filterL;
-    private static final int PAGE = 100;
-    private int page, slotCount;
+    private static final int PAGE = 80;
+    private int page;
     private volatile boolean resDirty;
     private final Command cNext = new Command("Next page", Command.SCREEN, 1);
     private final Command cPrev = new Command("Previous page", Command.SCREEN, 2);
@@ -243,16 +246,24 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         return mark + r.label();
     }
 
-    private void refreshResultMarks() { renderPage(); }
+    private void refreshResultMarks() { resDirty = true; renderPage(); }
 
-    private int pages() { return Math.max(1, (shown.size() + PAGE - 1) / PAGE); }
+    private final ResultGroups groups = new ResultGroups();
+    private Vector rows = new Vector();      // all rows (User, Dir, Result), filtered
+    private final Vector pageRows = new Vector(); // what resL shows right now
+    private Image icUser, icDir, icFile;
+    private ResultGroups.Dir pendingDir;
+    private final ResultGroups.Filter rowFilter = new ResultGroups.Filter() {
+        public boolean passes(Result r) { return SlskMIDlet.this.passes(r); }
+    };
 
-    /** Show the current page; only touches rows whose text changed. */
+    private int pages() { return Math.max(1, (rows.size() + PAGE - 1) / PAGE); }
+
     private long searchStarted;
 
     /** The phone shows "No results" for an empty list; say what's actually going on instead. */
     private String placeholder() {
-        int total = client == null ? 0 : client.results.size();
+        int total = groups.total();
         if (total > 0) return "(" + total + " results, none match the filter)";
         long secs = (System.currentTimeMillis() - searchStarted) / 1000;
         if (searchStarted == 0) return "(no search yet)";
@@ -260,9 +271,48 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         return "No results yet (still listening)";
     }
 
+    /** Small drawn icons, so user / folder / file rows are easy to tell apart. */
+    private void makeIcons() {
+        if (icUser != null) return;
+        try {
+            int s = 12;
+            Image m = Image.createImage(s, s);
+            Graphics g = m.getGraphics();
+            g.setColor(0xffffff); g.fillRect(0, 0, s, s);
+            g.setColor(0x2a9d8f); g.fillArc(3, 0, 6, 6, 0, 360); g.fillArc(1, 6, 10, 10, 0, 180);
+            icUser = Image.createImage(m);
+            m = Image.createImage(s, s); g = m.getGraphics();
+            g.setColor(0xffffff); g.fillRect(0, 0, s, s);
+            g.setColor(0xe9a23b); g.fillRect(0, 2, 5, 2); g.fillRect(0, 3, 12, 8);
+            icDir = Image.createImage(m);
+            m = Image.createImage(s, s); g = m.getGraphics();
+            g.setColor(0xffffff); g.fillRect(0, 0, s, s);
+            g.setColor(0x6c757d); g.fillArc(1, 7, 5, 4, 0, 360); g.fillRect(5, 1, 2, 8); g.fillRect(5, 1, 5, 2);
+            icFile = Image.createImage(m);
+        } catch (Throwable e) {}
+    }
+
+    private String rowLabel(Object o) {
+        if (o instanceof ResultGroups.User) return ResultGroups.userLabel((ResultGroups.User) o);
+        if (o instanceof ResultGroups.Dir) {
+            ResultGroups.Dir d = (ResultGroups.Dir) o;
+            return ResultGroups.dirLabel(d, ResultGroups.files(d, rowFilter).size());
+        }
+        Result r = (Result) o;
+        int st = client == null ? -1 : client.stateOf(r.user, r.file);
+        String mark = st < 0 ? "  " : st == Transfer.DONE ? "  [OK] " : st >= Transfer.FAILED ? "  [X] " : "  [DL] ";
+        return mark + ResultGroups.fileLabel(r);
+    }
+
+    private Image rowIcon(Object o) {
+        return o instanceof ResultGroups.User ? icUser : o instanceof ResultGroups.Dir ? icDir : icFile;
+    }
+
+    /** Show the current page; repeats the user/folder headers if a page starts mid-group. */
     private void renderPage() {
-        resDirty = false;
-        if (shown.size() == 0) {
+        if (resDirty) { rows = groups.rows(rowFilter); resDirty = false; }
+        if (rows.size() == 0) {
+            pageRows.removeAllElements();
             String p = placeholder();
             if (resL.size() == 1 && p.equals(resL.getString(0))) return;
             resL.deleteAll();
@@ -270,23 +320,43 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             titleResults();
             return;
         }
+        makeIcons();
         if (page >= pages()) page = pages() - 1;
         int start = page * PAGE;
-        int n = Math.max(0, Math.min(PAGE, shown.size() - start));
-        for (int k = 0; k < n; k++) {
-            String l = resLabel((Result) shown.elementAt(start + k));
-            if (k < resL.size()) { if (!l.equals(resL.getString(k))) resL.set(k, l, null); }
-            else resL.append(l, null);
+        int end = Math.min(rows.size(), start + PAGE);
+        pageRows.removeAllElements();
+        Object first = rows.elementAt(start);
+        if (first instanceof Result) {
+            Result r = (Result) first;
+            for (int k = start - 1; k >= 0; k--) {
+                Object o = rows.elementAt(k);
+                if (o instanceof ResultGroups.Dir && pageRows.size() == 0) pageRows.addElement(o);
+                if (o instanceof ResultGroups.User && ((ResultGroups.User) o).name.equals(r.user)) {
+                    pageRows.insertElementAt(o, 0);
+                    break;
+                }
+            }
+        } else if (first instanceof ResultGroups.Dir) {
+            pageRows.addElement(((ResultGroups.Dir) first).user);
         }
-        while (resL.size() > n) resL.delete(resL.size() - 1);
+        for (int k = start; k < end; k++) pageRows.addElement(rows.elementAt(k));
+        for (int k = 0; k < pageRows.size(); k++) {
+            Object o = pageRows.elementAt(k);
+            String l = rowLabel(o);
+            if (k < resL.size()) { if (!l.equals(resL.getString(k))) resL.set(k, l, rowIcon(o)); }
+            else resL.append(l, rowIcon(o));
+        }
+        while (resL.size() > pageRows.size()) resL.delete(resL.size() - 1);
         titleResults();
     }
 
     private void clearResults(String title) {
         resL.deleteAll();
-        shown.removeAllElements();
+        groups.clear();
+        rows = new Vector();
+        pageRows.removeAllElements();
         page = 0;
-        slotCount = 0;
+        resDirty = false;
         lastQuery = title;
         searchStarted = System.currentTimeMillis();
         resL.setTitle(title);
@@ -412,6 +482,16 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             notifyDestroyed();
         } else if (c == cStay) {
             showMain();
+        } else if (c == cDirYes || c == cDirNo) {
+            if (c == cDirYes && pendingDir != null && client != null) {
+                Vector v = ResultGroups.files(pendingDir, rowFilter);
+                for (int k = 0; k < v.size(); k++) client.download((Result) v.elementAt(k));
+                log("Queued " + v.size() + " files from " + ResultGroups.shortDir(pendingDir.path));
+                resDirty = true;
+                renderPage();
+            }
+            pendingDir = null;
+            display.setCurrent(resL);
         } else if (c == cCancel && d == connF) {
             if (client != null) client.logout();
             client = null;
@@ -486,8 +566,11 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             display.setCurrent(resL);
         } else if (d == resL) {
             int i = resL.getSelectedIndex();
-            int gi = i < 0 ? -1 : page * PAGE + i;
-            Result r = gi >= 0 && gi < shown.size() ? (Result) shown.elementAt(gi) : null;
+            Object row = i >= 0 && i < pageRows.size() ? pageRows.elementAt(i) : null;
+            Result r = row instanceof Result ? (Result) row : null;
+            String rowUser = row instanceof Result ? ((Result) row).user
+                    : row instanceof ResultGroups.User ? ((ResultGroups.User) row).name
+                    : row instanceof ResultGroups.Dir ? ((ResultGroups.Dir) row).user.name : null;
             if (c == cNext || c == cPrev) {
                 int np = page + (c == cNext ? 1 : -1);
                 if (np >= 0 && np < pages()) {
@@ -495,22 +578,37 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                     renderPage();
                     if (resL.size() > 0) resL.setSelectedIndex(0, true);
                 }
+            } else if (c == cGet && row instanceof ResultGroups.User) {
+                social.showUser(rowUser, resL);
+            } else if (c == cGet && row instanceof ResultGroups.Dir) {
+                pendingDir = (ResultGroups.Dir) row;
+                int n = ResultGroups.files(pendingDir, rowFilter).size();
+                Alert al = new Alert("Download folder?", "Download all " + n + " files in "
+                        + ResultGroups.shortDir(pendingDir.path) + " from " + rowUser + "?", null, AlertType.CONFIRMATION);
+                al.setTimeout(Alert.FOREVER);
+                al.addCommand(cDirYes);
+                al.addCommand(cDirNo);
+                al.setCommandListener(this);
+                display.setCurrent(al);
             } else if (c == cFilter) {
                 filterL = new List("Show", List.IMPLICIT, FILTERS, null);
                 filterL.setSelectedIndex(filter, true);
                 filterL.addCommand(cBack);
                 filterL.setCommandListener(this);
                 display.setCurrent(filterL);
-            } else if (c == cUser && r != null) {
-                social.showUser(r.user, resL);
+            } else if (c == cUser && rowUser != null) {
+                social.showUser(rowUser, resL);
             } else if (c == cGet && r != null) {
                 client.download(r);
-                resL.set(i, resLabel(r), null);
+                resL.set(i, rowLabel(r), icFile);
                 Alert a = new Alert("Queued", Util.baseName(r.file), null, AlertType.CONFIRMATION);
                 a.setTimeout(1200);
                 display.setCurrent(a, resL);
             } else if (c == cInfo && r != null) {
                 showInfo("File", r.details(), resL);
+            } else if (c == cInfo && row instanceof ResultGroups.Dir) {
+                ResultGroups.Dir dd = (ResultGroups.Dir) row;
+                showInfo("Folder", dd.path.replace('\\', '/') + "\n\nUser: " + dd.user.name + "\nFiles: " + dd.files.size(), resL);
             } else if (c == cNew) {
                 display.setCurrent(searchTB);
             } else if (c == cBack) {
@@ -570,7 +668,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                     display.callSerially(new Runnable() {
                         public void run() {
                             if (client != null && display.getCurrent() == dlL) refreshDownloads();
-                            if (client != null && display.getCurrent() == resL && (resDirty || shown.size() == 0)) renderPage();
+                            if (client != null && display.getCurrent() == resL && (resDirty || rows.size() == 0)) renderPage();
                             if (client != null) saveQueueIfChanged();
                             if (client != null && social.showingUploads()) social.refreshUploads();
                         }
@@ -704,35 +802,27 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     }
 
     private void titleResults() {
-        int total = client == null ? shown.size() : client.results.size();
-        String count = filter == 0 ? "" + total : shown.size() + "/" + total;
+        int total = groups.total();
+        int shownFiles = 0;
+        if (filter != 0) for (int k = 0; k < rows.size(); k++) if (rows.elementAt(k) instanceof Result) shownFiles++;
+        String count = filter == 0 ? "" + total : shownFiles + "/" + total;
         String pg = pages() > 1 ? "p" + (page + 1) + "/" + pages() + " " : "";
         resL.setTitle(pg + count + ": " + lastQuery);
     }
 
-    private void addResult(Result r) {
-        if (!passes(r)) return;
-        // free-slot results go first, queued ones after
-        if (r.slot) shown.insertElementAt(r, slotCount++);
-        else shown.addElement(r);
-        resDirty = true;
-    }
-
     private void refilter() {
-        shown.removeAllElements();
-        slotCount = 0;
         page = 0;
-        Vector v = client.results;
-        for (int i = 0; i < v.size(); i++) addResult((Result) v.elementAt(i));
+        resDirty = true;
         renderPage();
     }
 
     public void result(final Result r) {
         display.callSerially(new Runnable() {
             public void run() {
-                addResult(r);
-                // the first page fills live; after that the 1 s timer repaints in batches
-                if (page == 0 && (shown.size() <= PAGE)) renderPage();
+                groups.add(r);
+                resDirty = true;
+                // fill the first screen live; after that the 1 s timer repaints in batches
+                if (page == 0 && groups.total() <= 30) renderPage();
             }
         });
     }

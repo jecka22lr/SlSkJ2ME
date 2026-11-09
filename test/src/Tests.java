@@ -22,6 +22,24 @@ public class Tests {
       n++;
     }
     System.out.println("inflate ok x" + n);
+    // result grouping: free-slot users first, then faster; files grouped by folder; filter drops empty groups
+    ResultGroups g = new ResultGroups();
+    String[][] rs = { {"slowfree","M\\A\\Alb\\1.flac","1","100"}, {"queued","X\\B\\2.mp3","0","9999"},
+                      {"fastfree","Y\\C\\D\\3.mp3","1","500"}, {"slowfree","M\\A\\Alb\\4.mp3","1","100"},
+                      {"slowfree","M\\Other\\5.mp3","1","100"} };
+    for (int i = 0; i < rs.length; i++) {
+      Result x = new Result(); x.user = rs[i][0]; x.file = rs[i][1]; x.slot = rs[i][2].equals("1"); x.speed = Integer.parseInt(rs[i][3]); x.size = 1000;
+      g.add(x);
+    }
+    StringBuilder sb = new StringBuilder();
+    for (Object o : g.rows(null)) sb.append(o instanceof ResultGroups.User ? "U:" + ((ResultGroups.User) o).name
+        : o instanceof ResultGroups.Dir ? " D:" + ResultGroups.shortDir(((ResultGroups.Dir) o).path) : " F:" + Util.baseName(((Result) o).file)).append(";");
+    String want = "U:fastfree; D:C/D; F:3.mp3;U:slowfree; D:A/Alb; F:1.flac; F:4.mp3; D:M/Other; F:5.mp3;U:queued; D:X/B; F:2.mp3;";
+    if (!sb.toString().equals(want)) throw new Error("grouping: " + sb);
+    int mp3 = g.rows(new ResultGroups.Filter() { public boolean passes(Result r) { return r.file.endsWith(".mp3"); } }).size();
+    if (mp3 != 11 || g.total() != 5) throw new Error("filter rows " + mp3);
+    if (!ResultGroups.shortDir("").equals("(top folder)") || !ResultGroups.shortDir("Solo").equals("Solo")) throw new Error("shortDir");
+    System.out.println("grouping ok");
     System.out.println(Util.ip(0x7F000001) + " " + Util.size(5_500_000) + " " + Util.urlEscape("Bjørk - 01 Hyper ballad.mp3"));
   }
 }
