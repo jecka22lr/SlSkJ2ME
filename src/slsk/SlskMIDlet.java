@@ -102,7 +102,11 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         interests = new InterestsUI(this, social, display);
         loadStrings("slskme-hist", history);
         loadFilters();
+        ChatColors.display = display;
         ChatColors.load();
+        if (ChatColors.bgMode == ChatColors.BG_IMAGE) {
+            new Thread(new Runnable() { public void run() { ChatColors.loadImage(); } }).start();
+        }
         buildLogin();
         logF = new Form("Log");
         logF.addCommand(cBack);

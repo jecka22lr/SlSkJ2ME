@@ -39,6 +39,8 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - Private rooms: create, invite and remove members, see private rooms you belong to, leave for good
 - Chat and messages open at the newest line and scroll with Up/Down or by dragging
 - Coloured nicknames in chat: yours, online, offline (colours are customisable)
+- Chat follows your phone theme (dark themes too), or uses the phone's native screen; custom background
+  colour or image (fill, stretch or tile, adjustable dimming)
 
 Uploads only reach people with an open port when you're on mobile data (you can't accept incoming
 connections behind carrier NAT). Big share lists may not fit in phone memory when browsing.
@@ -86,7 +88,9 @@ server, so screens can be checked without a phone. See `test/emu/README.md`.
 | `Shares.java` | Shared file index: scan, search matching, share list / search responses |
 | `SocialUI.java` | Rooms, messages, users, buddies, browse, wishlist, profile & sharing, uploads screens |
 | `InterestsUI.java` | Likes/dislikes, recommendations, similar users |
-| `ChatView.java` | Scrollable chat/message view that opens at the newest line |
+| `ChatView.java` | Drawn chat/message view: theme colours, backgrounds, opens at the newest line |
+| `NativeChat.java` | Native-form chat style |
+| `ChatColors.java` | Chat look settings: name colours, theme colours, background colour/image |
 | `PeerConn.java` | Peer connections: PierceFirewall / PeerInit, messages ("P") and file data ("F") |
 | `Inflate.java` | zlib decoder (search results are compressed, CLDC has no java.util.zip) |
 | `MD5.java` | Login hash |

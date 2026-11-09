@@ -53,20 +53,29 @@ final class SocialUI implements CommandListener {
     private final Command cMembers = new Command("Members", Command.SCREEN, 6);
     private final Command cQuitPriv = new Command("Quit", "Leave private room for good", Command.SCREEN, 7);
     private List membersL;
-    private final Command cColors = new Command("Colors", "Name colors", Command.SCREEN, 8);
+    private final Command cColors = new Command("Colors", "Colors & background", Command.SCREEN, 8);
     private final Command cColorsOk = new Command("OK", Command.OK, 1);
-    private javax.microedition.lcdui.Form colorsF;
-    private ChoiceGroup gOwn, gOnline, gOffline;
+    private javax.microedition.lcdui.Form colorsF, pickF;
+    private ChoiceGroup gOwn, gOnline, gOffline, gStyle, gBg, gFit;
     private Displayable colorsBack;
+    private final Command cPickColor = new Command("Colour", "Pick background colour", Command.SCREEN, 2);
+    private final Command cPickImage = new Command("Image", "Pick background image", Command.SCREEN, 3);
+    private javax.microedition.lcdui.Gauge gR, gG, gB, gDim;
+    private ChoiceGroup gDimDir;
+    private TextField fHex;
+    private javax.microedition.lcdui.ImageItem preview;
+    private int pickColor;
+    private String pickOpenedHex = "";
+    private boolean pickTyped;
 
     // rooms
     private List roomsL, usersL;
-    private ChatView roomF;
+    private Displayable roomF;   // a ChatScreen: ChatView or NativeChat
     private Room curRoom;
     private final Vector roomRows = new Vector(); // String room names in roomsL order
     // messages
     private List convosL;
-    private ChatView convoF;
+    private Displayable convoF;
     private Convo curConvo;
     // text input (shared)
     private TextBox inputTB;
@@ -168,14 +177,14 @@ final class SocialUI implements CommandListener {
         curRoom = r;
         r.unread = 0;
         final Room room = r;
-        roomF = new ChatView(r.name, new ChatView.Namer() {
+        roomF = newChat(r.name, new ChatView.Namer() {
             public int color(String n) {
                 if (n.equals(c().username)) return ChatColors.VALUES[ChatColors.own];
                 // in a room, being in its user list means online
                 return ChatColors.VALUES[room.users.contains(n) ? ChatColors.online : ChatColors.offline];
             }
         });
-        roomF.setLines(r.lines);
+        cs(roomF).setLines(r.lines);
         roomF.addCommand(cSay);
         roomF.addCommand(cUsers);
         roomF.addCommand(cLeave);
@@ -188,26 +197,176 @@ final class SocialUI implements CommandListener {
         }
         roomF.addCommand(cBack);
         roomF.setCommandListener(this);
-        d.setCurrent(roomF);
+        cs(roomF).show(d);
     }
+
+    /** A chat screen in the chosen style. */
+    private Displayable newChat(String title, ChatView.Namer namer) {
+        if (ChatColors.style == ChatColors.STYLE_NATIVE) return new NativeChat(title, d);
+        return new ChatView(title, namer);
+    }
+
+    private static ChatScreen cs(Displayable x) { return (ChatScreen) x; }
 
     private void showColors(Displayable back) {
         colorsBack = back;
-        colorsF = new javax.microedition.lcdui.Form("Name colors");
+        colorsF = new javax.microedition.lcdui.Form("Chat look");
+        gStyle = new ChoiceGroup("Chat style", ChoiceGroup.EXCLUSIVE,
+            new String[] { "Drawn, in phone theme colours", "Phone's own screen (native)" }, null);
+        gStyle.setSelectedIndex(ChatColors.style, true);
         gOwn = new ChoiceGroup("Your name", ChoiceGroup.POPUP, ChatColors.NAMES, null);
         gOnline = new ChoiceGroup("Others, online", ChoiceGroup.POPUP, ChatColors.NAMES, null);
         gOffline = new ChoiceGroup("Others, offline", ChoiceGroup.POPUP, ChatColors.NAMES, null);
         gOwn.setSelectedIndex(ChatColors.own, true);
         gOnline.setSelectedIndex(ChatColors.online, true);
         gOffline.setSelectedIndex(ChatColors.offline, true);
+        gBg = new ChoiceGroup("Background", ChoiceGroup.EXCLUSIVE, new String[] { "Phone theme", "Colour", "Image" }, null);
+        gBg.setSelectedIndex(ChatColors.bgMode, true);
+        gFit = new ChoiceGroup("Image", ChoiceGroup.POPUP, new String[] { "Fill (crop)", "Stretch", "Tile" }, null);
+        gFit.setSelectedIndex(ChatColors.fit, true);
+        colorsF.append(gStyle);
         colorsF.append(gOwn);
         colorsF.append(gOnline);
         colorsF.append(gOffline);
-        colorsF.append(new StringItem(null, "Only the names are coloured, messages stay black. In rooms, offline means they've left the room."));
+        colorsF.append(gBg);
+        colorsF.append(gFit);
+        gDim = new javax.microedition.lcdui.Gauge("Image dimming (" + ChatColors.dim + "%)", true, 9, ChatColors.dim / 10);
+        gDimDir = new ChoiceGroup("Dim toward", ChoiceGroup.POPUP, new String[] { "Auto", "Darker", "Lighter" }, null);
+        gDimDir.setSelectedIndex(ChatColors.dimDir, true);
+        colorsF.append(gDim);
+        colorsF.append(gDimDir);
+        colorsF.setItemStateListener(new javax.microedition.lcdui.ItemStateListener() {
+            public void itemStateChanged(javax.microedition.lcdui.Item it) {
+                if (it == gDim) gDim.setLabel("Image dimming (" + gDim.getValue() * 10 + "%)");
+            }
+        });
+        colorsF.append(new StringItem(null, "Colour: #" + hex(ChatColors.bgColor)
+            + (ChatColors.bgImage.length() > 0 ? "\nImage: " + Util.decodeUrl(Util.baseName(ChatColors.bgImage)) : "")
+            + "\n\nOnly names are coloured; text follows the background. Images are dimmed so text stays readable (0% = not at all; text colour adapts either way). "
+            + "The native style uses your theme as-is: bold names, no custom colours or background. "
+            + "In rooms, offline means they've left the room."));
         colorsF.addCommand(cColorsOk);
+        colorsF.addCommand(cPickColor);
+        colorsF.addCommand(cPickImage);
         colorsF.addCommand(cBack);
         colorsF.setCommandListener(this);
         d.setCurrent(colorsF);
+    }
+
+    private void readAppearance() {
+        ChatColors.style = gStyle.getSelectedIndex();
+        ChatColors.own = gOwn.getSelectedIndex();
+        ChatColors.online = gOnline.getSelectedIndex();
+        ChatColors.offline = gOffline.getSelectedIndex();
+        ChatColors.bgMode = gBg.getSelectedIndex();
+        ChatColors.fit = gFit.getSelectedIndex();
+        ChatColors.dim = gDim.getValue() * 10;
+        ChatColors.dimDir = gDimDir.getSelectedIndex();
+        ChatColors.forget();
+        ChatColors.save();
+    }
+
+    /** Back to the chat we came from, rebuilt in case the style changed. */
+    private void reopenChat() {
+        if (colorsBack == roomF && curRoom != null) openRoom(curRoom);
+        else if (colorsBack == convoF && curConvo != null) openConvo(curConvo);
+        else d.setCurrent(colorsBack != null ? colorsBack : m.main());
+    }
+
+    static String hex(int c) {
+        String h = Integer.toHexString(c & 0xffffff).toUpperCase();
+        while (h.length() < 6) h = "0" + h;
+        return h;
+    }
+
+    private void showColorPicker() {
+        pickColor = ChatColors.bgColor;
+        pickOpenedHex = hex(pickColor);
+        pickTyped = false;
+        pickF = new javax.microedition.lcdui.Form("Background colour");
+        gR = new javax.microedition.lcdui.Gauge("Red", true, 15, ((pickColor >> 16) & 255) / 17);
+        gG = new javax.microedition.lcdui.Gauge("Green", true, 15, ((pickColor >> 8) & 255) / 17);
+        gB = new javax.microedition.lcdui.Gauge("Blue", true, 15, (pickColor & 255) / 17);
+        fHex = new TextField("Or type it (RRGGBB)", hex(pickColor), 6, TextField.ANY);
+        preview = new javax.microedition.lcdui.ImageItem("Preview", swatch(pickColor), javax.microedition.lcdui.Item.LAYOUT_CENTER, "");
+        pickF.append(preview);
+        pickF.append(gR);
+        pickF.append(gG);
+        pickF.append(gB);
+        pickF.append(fHex);
+        pickF.addCommand(cColorsOk);
+        pickF.addCommand(cBack);
+        pickF.setCommandListener(this);
+        pickF.setItemStateListener(new javax.microedition.lcdui.ItemStateListener() {
+            public void itemStateChanged(javax.microedition.lcdui.Item it) {
+                if (it == fHex) {
+                    pickTyped = true;
+                    try {
+                        int v = Integer.parseInt(fHex.getString().trim(), 16) & 0xffffff;
+                        if (fHex.getString().trim().length() != 6) return;
+                        pickColor = v;
+                        gR.setValue(((v >> 16) & 255) / 17); gG.setValue(((v >> 8) & 255) / 17); gB.setValue((v & 255) / 17);
+                    } catch (Exception e) { return; }
+                } else {
+                    pickTyped = false;
+                    pickColor = (gR.getValue() * 17) << 16 | (gG.getValue() * 17) << 8 | gB.getValue() * 17;
+                    fHex.setString(hex(pickColor));
+                }
+                preview.setImage(swatch(pickColor));
+            }
+        });
+        d.setCurrent(pickF);
+    }
+
+    /** A small preview: the colour with sample text and a name in the chosen name colour. */
+    private javax.microedition.lcdui.Image swatch(int c) {
+        javax.microedition.lcdui.Image img = javax.microedition.lcdui.Image.createImage(150, 34);
+        javax.microedition.lcdui.Graphics g = img.getGraphics();
+        g.setColor(c);
+        g.fillRect(0, 0, 150, 34);
+        int fg = ChatColors.lum(c) < 128 ? 0xf0f0f0 : 0x101010;
+        javax.microedition.lcdui.Font f = javax.microedition.lcdui.Font.getFont(javax.microedition.lcdui.Font.FACE_PROPORTIONAL,
+            javax.microedition.lcdui.Font.STYLE_BOLD, javax.microedition.lcdui.Font.SIZE_SMALL);
+        g.setFont(f);
+        g.setColor(ChatColors.readable(ChatColors.VALUES[gOnline != null ? gOnline.getSelectedIndex() : ChatColors.online], c));
+        g.drawString("friend:", 4, 9, javax.microedition.lcdui.Graphics.TOP | javax.microedition.lcdui.Graphics.LEFT);
+        int x = 4 + f.stringWidth("friend: ");
+        g.setFont(javax.microedition.lcdui.Font.getFont(javax.microedition.lcdui.Font.FACE_PROPORTIONAL,
+            javax.microedition.lcdui.Font.STYLE_PLAIN, javax.microedition.lcdui.Font.SIZE_SMALL));
+        g.setColor(fg);
+        g.drawString("hello", x, 9, javax.microedition.lcdui.Graphics.TOP | javax.microedition.lcdui.Graphics.LEFT);
+        return javax.microedition.lcdui.Image.createImage(img);
+    }
+
+    private void pickImage() {
+        String start = null;
+        if (ChatColors.bgImage.length() > 0) start = ChatColors.bgImage.substring(0, ChatColors.bgImage.lastIndexOf('/') + 1);
+        new FolderPicker(d, "Pick background image", new FolderPicker.Done() {
+            public void picked(String url) {
+                if (url == null) { d.setCurrent(colorsF); return; }
+                ChatColors.bgImage = url;
+                ChatColors.forget();
+                gBg.setSelectedIndex(ChatColors.BG_IMAGE, true);
+                loadImageThen(colorsF);
+            }
+        }, ",jpg,jpeg,png,gif,bmp,").show(start);
+    }
+
+    /** Decode the image off the UI thread, then go to next (or just report a problem). */
+    private void loadImageThen(final Displayable next) {
+        new Thread(new Runnable() {
+            public void run() {
+                final String err = ChatColors.loadImage();
+                d.callSerially(new Runnable() {
+                    public void run() {
+                        Displayable after = next != null ? next : d.getCurrent();
+                        if (err != null) m.alert("Background image", err, after);
+                        else if (next != null) d.setCurrent(next);
+                        else if (d.getCurrent() instanceof ChatView) ((ChatView) d.getCurrent()).refresh();
+                    }
+                });
+            }
+        }).start();
     }
 
     private void showMembers() {
@@ -248,7 +407,7 @@ final class SocialUI implements CommandListener {
     void openConvo(Convo cv) {
         curConvo = cv;
         cv.unread = 0;
-        convoF = new ChatView(cv.user, new ChatView.Namer() {
+        convoF = newChat(cv.user, new ChatView.Namer() {
             public int color(String n) {
                 Client cl = c();
                 if (n.equals(cl.username)) return ChatColors.VALUES[ChatColors.own];
@@ -258,13 +417,13 @@ final class SocialUI implements CommandListener {
             }
         });
         c().getUserStatus(cv.user);
-        convoF.setLines(cv.lines);
+        cs(convoF).setLines(cv.lines);
         convoF.addCommand(cSay);
         convoF.addCommand(cProfile);
         convoF.addCommand(cColors);
         convoF.addCommand(cBack);
         convoF.setCommandListener(this);
-        d.setCurrent(convoF);
+        cs(convoF).show(d);
     }
 
     int unreadPMs() {
@@ -696,14 +855,14 @@ final class SocialUI implements CommandListener {
             else if (r != null && b == null && cur == roomsL && roomsL != null) { fillRooms(); openRoom(r); }
             else if (cur == roomsL) fillRooms();
             if (r != null && r == curRoom && "left".equals(b) && cur == roomF) showRooms();
-            else if (r != null && r == curRoom && cur == roomF) roomF.refresh();
+            else if (r != null && r == curRoom && cur == roomF) cs(roomF).refresh();
             break;
         }
         case Client.EV_ROOMMSG: {
             Room r = (Room) a;
             if (r == curRoom && cur == roomF) {
                 r.unread = 0;
-                roomF.add(String.valueOf(b));
+                cs(roomF).add(String.valueOf(b));
             }
             break;
         }
@@ -711,7 +870,7 @@ final class SocialUI implements CommandListener {
             Convo cv = (Convo) a;
             if (cv == curConvo && cur == convoF) {
                 cv.unread = 0;
-                convoF.add(String.valueOf(cv.lines.lastElement()));
+                cs(convoF).add(String.valueOf(cv.lines.lastElement()));
             } else {
                 m.notifyUser("Message from " + cv.user + ": " + b);
                 if (cur == convosL) showConvos();
@@ -721,7 +880,7 @@ final class SocialUI implements CommandListener {
         case Client.EV_USERINFO: {
             UserInfo i = (UserInfo) a;
             if (profileF != null && cur == profileF && i.user.equals(curUser)) fillProfile(i);
-            if (cur == convoF && convoF != null && curConvo != null && i.user.equals(curConvo.user)) convoF.refresh();
+            if (cur == convoF && convoF != null && curConvo != null && i.user.equals(curConvo.user)) cs(convoF).refresh();
             if (cur == buddiesL && buddiesL != null) {
                 int k = c().buddies.indexOf(i.user);
                 if (k >= 0 && k < buddiesL.size()) buddiesL.set(k, buddyLabel(i.user), null);
@@ -771,7 +930,7 @@ final class SocialUI implements CommandListener {
             String t = inputTB.getString().trim();
             if (t.length() == 0) return;
             switch (inputMode) {
-            case 1: cl.say(curRoom.name, t); roomF.toBottom(); d.setCurrent(roomF); break;
+            case 1: cl.say(curRoom.name, t); cs(roomF).show(d); break;
             case 2:
                 cl.sendPM(curConvo.user, t);
                 openConvo(curConvo);
@@ -820,14 +979,26 @@ final class SocialUI implements CommandListener {
                 else { cl.joinRoom(name); roomsL.setTitle("Joining " + name + "..."); }
             }
         } else if (s == colorsF) {
+            if (c == cPickColor) { showColorPicker(); return; }
+            if (c == cPickImage) { pickImage(); return; }
             if (c == cColorsOk) {
-                ChatColors.own = gOwn.getSelectedIndex();
-                ChatColors.online = gOnline.getSelectedIndex();
-                ChatColors.offline = gOffline.getSelectedIndex();
-                ChatColors.save();
+                readAppearance();
+                if (ChatColors.bgMode == ChatColors.BG_IMAGE && !ChatColors.imageReady()) loadImageThen(null);
             }
-            if (colorsBack instanceof ChatView) ((ChatView) colorsBack).refresh();
-            d.setCurrent(colorsBack != null ? colorsBack : m.main());
+            reopenChat();
+        } else if (s == pickF) {
+            if (c == cColorsOk) {
+                // read the controls themselves: not every phone reports slider moves to the listener
+                int fromGauges = (gR.getValue() * 17) << 16 | (gG.getValue() * 17) << 8 | gB.getValue() * 17;
+                int chosen = fromGauges;
+                String hx = fHex.getString().trim();
+                if (!hx.equalsIgnoreCase(pickOpenedHex) && !hx.equalsIgnoreCase(hex(pickColor)) || pickTyped) {
+                    try { if (hx.length() == 6) chosen = Integer.parseInt(hx, 16) & 0xffffff; } catch (Exception e) {}
+                }
+                ChatColors.bgColor = chosen;
+                gBg.setSelectedIndex(ChatColors.BG_COLOR, true);
+            }
+            d.setCurrent(colorsF);
         } else if (s == roomF && c == cColors) {
             showColors(roomF);
         } else if (s == convoF && c == cColors) {
@@ -845,14 +1016,14 @@ final class SocialUI implements CommandListener {
             int i = membersL.getSelectedIndex();
             Vector v = curRoom.members;
             String u = v != null && i >= 0 && i < v.size() ? (String) v.elementAt(i) : null;
-            if (c == cBack) d.setCurrent(roomF);
+            if (c == cBack) cs(roomF).show(d);
             else if (c == cRemove && u != null) {
                 cl.privateRoomRemove(curRoom.name, u);
                 v.removeElement(u);
                 showMembers();
             } else if (c == List.SELECT_COMMAND && u != null) showUser(u, membersL);
         } else if (s == usersL) {
-            if (c == cBack) d.setCurrent(roomF);
+            if (c == cBack) cs(roomF).show(d);
             else if (c == List.SELECT_COMMAND && usersL.getSelectedIndex() >= 0)
                 showUser(usersL.getString(usersL.getSelectedIndex()), usersL);
         } else if (s == buddiesL) {

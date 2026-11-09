@@ -33,6 +33,20 @@ final class FolderPicker implements CommandListener {
     private final Command cMake = new Command("Create", Command.OK, 1);
     private final Command cBack = new Command("Back", Command.BACK, 2);
 
+    /** null: pick a folder. Else ",jpg,png," style list: pick a file with one of those extensions. */
+    private String exts;
+
+    /** File mode: Done gets the file's URL (no trailing "/"). */
+    FolderPicker(Display d, String title, Done done, String exts) {
+        this(d, title, done);
+        this.exts = exts;
+    }
+
+    private boolean wanted(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 && exts.indexOf("," + name.substring(dot + 1).toLowerCase() + ",") >= 0;
+    }
+
     FolderPicker(Display d, String title, Done done) {
         this.d = d;
         this.done = done;
@@ -55,7 +69,7 @@ final class FolderPicker implements CommandListener {
         // file access can trigger a permission prompt; never block the UI thread with it
         new Thread(new Runnable() {
             public void run() {
-                final Vector names = new Vector(), us = new Vector();
+                final Vector names = new Vector(), us = new Vector(), files = new Vector();
                 String at = null;
                 String err = null;
                 try {
@@ -69,6 +83,7 @@ final class FolderPicker implements CommandListener {
                                     String n = (String) e.nextElement();
                                     if (n.endsWith("/")) insertSorted(names, us, n.substring(0, n.length() - 1),
                                             url + Util.urlEscape(n.substring(0, n.length() - 1)) + "/");
+                                    else if (exts != null && wanted(n)) files.addElement(new String[] { n, url + Util.urlEscape(n) });
                                 }
                             }
                         } finally {
@@ -102,7 +117,14 @@ final class FolderPicker implements CommandListener {
                 }
                 final String fat = at, ferr = err;
                 d.callSerially(new Runnable() {
-                    public void run() { fill(fat, names, us, ferr); }
+                    public void run() {
+                        fill(fat, names, us, ferr);
+                        for (int i = 0; i < files.size(); i++) {
+                            String[] f = (String[]) files.elementAt(i);
+                            l.append(f[0], null);
+                            urls.addElement(f[1]);
+                        }
+                    }
                 });
             }
         }).start();
@@ -125,8 +147,10 @@ final class FolderPicker implements CommandListener {
         if (at != null) {
             l.append(".. (up)", null);
             urls.addElement(null);
-            l.addCommand(cUse);
-            l.addCommand(cNew);
+            if (exts == null) {
+                l.addCommand(cUse);
+                l.addCommand(cNew);
+            }
             l.setTitle(Store.friendly(at));
         } else {
             l.setTitle("Pick a drive");
@@ -138,7 +162,7 @@ final class FolderPicker implements CommandListener {
             urls.addElement(us.elementAt(i));
         }
         if (err != null) l.append("(" + err + ")", null);
-        else if (at != null && names.size() == 0) l.append("(no subfolders)", null);
+        else if (at != null && names.size() == 0 && exts == null) l.append("(no subfolders)", null);
     }
 
     private String parentOf(String url) {
@@ -182,6 +206,7 @@ final class FolderPicker implements CommandListener {
             if (i < 0 || i >= urls.size()) return;
             String u = (String) urls.elementAt(i);
             if (u == null) load(cur == null ? null : parentOf(cur)); // ".. (up)"
+            else if (exts != null && !u.endsWith("/")) done.picked(u);
             else load(u);
         }
     }

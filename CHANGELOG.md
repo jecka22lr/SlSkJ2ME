@@ -9,9 +9,14 @@
   Pick any item for who likes it, similar things, or to search for it. Users' menus have Their interests
 - Private rooms: Chat rooms > Private creates one; private rooms you own or belong to show in the list;
   inside one: Invite, Members (owners can remove people) and Quit. You get a notice when someone adds you
-- Nicknames in chat rooms and messages are coloured (the message text stays black): your own name,
-  people online, people offline (in a room: people who've left it). Pick the colours under Colors in
-  any chat or message screen; they're remembered
+- Nicknames in chat rooms and messages are coloured, the message text isn't: your own name,
+  people online, people offline (in a room: people who've left it)
+- Chat look (Colors in any chat or message screen):
+  - Style: drawn in your phone theme's colours (default, so it matches dark themes), or the phone's
+    own native screen (follows the theme exactly, bold names, no custom colours)
+  - Background: phone theme, a colour (sliders with preview, or type RRGGBB), or an image from the
+    phone that fills (crops), stretches or tiles, with adjustable dimming toward darker/lighter/auto
+  - Name colours are nudged lighter or darker when they'd be hard to read on the background
 - Fixed: private rooms are joined with the private flag (from the room list and when rejoining after
   a reconnect), so the server doesn't refuse them or treat them as new public rooms
 - Fixed: a queued download whose name isn't UTF-8 could lose its original name bytes in a long session

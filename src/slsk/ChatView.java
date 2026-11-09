@@ -10,7 +10,7 @@ import javax.microedition.lcdui.Graphics;
  * line (LCDUI Forms open at the top, and phones differ on whether they let you scroll them).
  * Up/Down or dragging scrolls; new lines keep it pinned to the bottom unless you've scrolled up.
  */
-final class ChatView extends Canvas {
+final class ChatView extends Canvas implements ChatScreen {
     /** Colour for a nickname, decided by whoever shows this view. */
     interface Namer { int color(String name); }
 
@@ -30,10 +30,12 @@ final class ChatView extends Canvas {
         this.namer = namer;
     }
 
-    /** Statuses changed: redraw the names. */
-    void refresh() { repaint(); }
+    /** Statuses or colours changed: redraw. */
+    public void refresh() { repaint(); }
 
-    void setLines(Vector src) {
+    public void show(javax.microedition.lcdui.Display d) { d.setCurrent(this); }
+
+    public void setLines(Vector src) {
         lines.removeAllElements();
         for (int i = Math.max(0, src.size() - 60); i < src.size(); i++) lines.addElement(String.valueOf(src.elementAt(i)));
         wrapW = -1;
@@ -41,7 +43,7 @@ final class ChatView extends Canvas {
         repaint();
     }
 
-    void add(String line) {
+    public void add(String line) {
         lines.addElement(line);
         while (lines.size() > 60) lines.removeElementAt(0);
         wrapW = -1;
@@ -49,7 +51,7 @@ final class ChatView extends Canvas {
     }
 
     /** Jump to the newest line (after you send something). */
-    void toBottom() { stick = true; repaint(); }
+    public void toBottom() { stick = true; repaint(); }
 
     int lineCount() { return lines.size(); }
 
@@ -102,12 +104,15 @@ final class ChatView extends Canvas {
         int w = getWidth(), h = getHeight();
         if (wrapW != w - 8) rewrap(w - 8);
         if (stick || top > maxTop()) top = maxTop();
-        g.setColor(0xffffff);
-        g.fillRect(0, 0, w, h);
+        // background first: an image also decides the text colour (via its tone)
+        javax.microedition.lcdui.Image bgImg = ChatColors.bgMode == ChatColors.BG_IMAGE ? ChatColors.backgroundImage(w, h) : null;
+        int bg = ChatColors.background(), fg = ChatColors.text();
+        if (bgImg != null) g.drawImage(bgImg, 0, 0, Graphics.TOP | Graphics.LEFT);
+        else { g.setColor(bg); g.fillRect(0, 0, w, h); }
         g.setFont(font);
         int y = 2, lh = lineH();
         if (wrapped.size() == 0) {
-            g.setColor(0x888888);
+            g.setColor(ChatColors.mix(fg, bg, 40));
             g.drawString("No messages yet. Write to start.", 4, y, Graphics.TOP | Graphics.LEFT);
             return;
         }
@@ -117,7 +122,7 @@ final class ChatView extends Canvas {
             int x = 4;
             if (n > 0) {
                 String nm = (String) names.elementAt(i);
-                g.setColor(namer == null ? 0x000000 : namer.color(nm));
+                g.setColor(ChatColors.readable(namer == null ? fg : namer.color(nm), bg));
                 Font bold = Font.getFont(font.getFace(), Font.STYLE_BOLD, font.getSize());
                 g.setFont(bold);
                 String head = t.substring(0, n);
@@ -125,12 +130,13 @@ final class ChatView extends Canvas {
                 x += bold.stringWidth(head);
                 g.setFont(font);
             }
-            g.setColor(0x000000);
+            g.setColor(fg);
             g.drawString(t.substring(n), x, y, Graphics.TOP | Graphics.LEFT);
             y += lh;
         }
-        if (top > 0) { g.setColor(0x999999); g.fillTriangle(w - 9, 8, w - 3, 8, w - 6, 3); }
-        if (top < maxTop()) { g.setColor(0x999999); g.fillTriangle(w - 9, h - 8, w - 3, h - 8, w - 6, h - 3); }
+        g.setColor(ChatColors.mix(fg, bg, 40));
+        if (top > 0) g.fillTriangle(w - 9, 8, w - 3, 8, w - 6, 3);
+        if (top < maxTop()) g.fillTriangle(w - 9, h - 8, w - 3, h - 8, w - 6, h - 3);
     }
 
     private void scroll(int by) {

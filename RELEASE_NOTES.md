@@ -2,7 +2,8 @@ SlskME 1.0: a full Soulseek client for J2ME phones, tested on the Nokia C6-00.
 
 **New since Beta 0.4.2**
 - **Chat and messages open at the newest message** and stay there as new ones arrive. Up/Down scroll, dragging works on touch screens
-- **Coloured nicknames**: your own name, people online and people offline each get their own colour (only the name, not the message). Change them under Colors in any chat
+- **Coloured nicknames**: your own name, people online and people offline each get their own colour (only the name, not the message)
+- **Chat look** (Colors in any chat): follows your phone theme by default, dark themes included, or switch to the phone's native screen. Set a background colour or an image (fill, stretch or tile, with adjustable dimming)
 - **Buddies** in the main menu: who's online, alerts when they come and go, they skip your upload queue, search all their files at once
 - **Ignore** hides someone's chat and messages. **Ban** stops them browsing or downloading from you. Both in the user menu, undo under Buddies > Blocked
 - **Interests**: likes and dislikes, recommendations (yours and global), similar users, who likes what. Pick a thing to search for it
