@@ -9,6 +9,9 @@
 - Files the phone won't open one by one are sized through the folder's own connection instead
   of being skipped
 - Finished downloads saved inside the shared folder are shared right away, no rescan needed
+- When someone's browse/profile request can't reach the phone, the Log says so and the server is
+  told right away (CantConnectToPeer) instead of leaving them waiting
+- Browse/profile requests are no longer silently dropped when searches have filled the peer slots
 - About screen says Beta; folder picker's "Use this folder" soft key no longer gets cut off
 
 ## Beta 0.4.1

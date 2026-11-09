@@ -264,7 +264,12 @@ public final class Client implements Runnable {
             String u = r.str(), type = r.str();
             int ip = r.u32(), p = r.u32(), tok = r.u32();
             if (!"P".equals(type) && !"F".equals(type)) break;
-            if ("P".equals(type) && peerCount >= maxPeers && !hasPending(u) && !hasUpload(u)) break;
+            // searches can fill the peer slots; keep some headroom so browse/profile requests still get through
+            if ("P".equals(type) && peerCount >= maxPeers + 4 && !hasPending(u) && !hasUpload(u)) {
+                log("Too many connections, ignored " + u + "'s request (they'll see 'cannot connect')");
+                trySend(1001, new Msg().u32(tok).str(u));
+                break;
+            }
             if ("F".equals(type)) fileConnStep(u, "Uploader asked us to connect (F)");
             PeerConn.pierce(this, u, type, Util.ip(ip), p, tok).start();
             break;
@@ -913,6 +918,12 @@ public final class Client implements Runnable {
     void registerPeer(PeerConn p) {
         if (p.user == null) return;
         synchronized (peers) { peers.put(p.user, p); }
+    }
+
+    /** We couldn't reach someone who asked us to connect: tell the server so they stop waiting. */
+    void pierceFailed(String user, int token, String why) {
+        log("Couldn't connect back to " + user + " (" + why + "). If both of you have closed ports, Soulseek can't link you.");
+        trySend(1001, new Msg().u32(token).str(user));
     }
 
     /** Incoming PierceFirewall: match it to a ConnectToPeer we sent. */

@@ -138,6 +138,7 @@ final class PeerConn implements Runnable {
         } catch (Throwable e) {
             String m = e.getMessage() == null ? e.toString() : e.getMessage();
             if (mode == DIRECT || "F".equals(type)) c.log("Peer " + user + " (" + type + "): " + m);
+            else if (mode == PIERCE && ready == 0) c.pierceFailed(user, token, m);
             if ("F".equals(type) && upload == null) c.fileConnFailed(user, m);
             if (upload != null && ready == 1) c.uploadFailed(upload, m, true);
         } finally {
