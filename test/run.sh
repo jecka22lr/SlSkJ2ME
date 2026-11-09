@@ -17,7 +17,8 @@ java -cp $T/cls:$CP slsk.FolderT
 rm -rf /tmp/slskfs
 python3 test/mock.py 25 > $T/mock.log 2>&1 &
 sleep 1
-java -cp $T/cls:$CP slsk.E2E | tee $T/e2e.log
+timeout 60 java -cp $T/cls:$CP slsk.E2E > $T/e2e.log 2>&1 || { cat $T/e2e.log $T/mock.log; exit 1; }
+cat $T/e2e.log
 cmp /tmp/expected.bin "/tmp/slskfs/E:/Soulseek/04 Hyper-ballad.mp3"
 grep -q "TRANSFER Done" $T/e2e.log
 # social + sharing: rooms, PMs, profiles, browse both ways, wishlist, distributed search, upload
@@ -28,7 +29,8 @@ echo notes > "/tmp/slskfs/E:/Share/Misc/notes.txt"
 python3 test/mock2.py 40 > $T/mock2.log 2>&1 &
 M2=$!
 sleep 1
-java -cp $T/cls:$CP slsk.E2E2 | tee $T/e2e2.log
+timeout 120 java -cp $T/cls:$CP slsk.E2E2 > $T/e2e2.log 2>&1 || { cat $T/e2e2.log $T/mock2.log; exit 1; }
+cat $T/e2e2.log
 wait $M2 || { cat $T/mock2.log; exit 1; }
 grep MOCK2 $T/mock2.log
 echo "ALL TESTS PASSED"

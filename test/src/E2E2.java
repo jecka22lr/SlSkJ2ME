@@ -26,6 +26,10 @@ public class E2E2 implements Client.Listener {
     System.out.println("E2E2 ok " + what);
   }
   public static void main(String[] a) throws Exception {
+    try { run(); } catch (Throwable t) { t.printStackTrace(); System.out.println("TEST FAILED: " + t); System.exit(1); }
+    System.exit(0);
+  }
+  static void run() throws Exception {
     E2E2 ui = new E2E2();
     Client c = new Client(ui, "jecka", "pw", "127.0.0.1", 22520, 0, "file:///E:/Soulseek/");
     c.description = "phone gang";

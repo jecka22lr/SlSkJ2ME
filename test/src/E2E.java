@@ -8,6 +8,10 @@ public class E2E implements Client.Listener {
   public void log(String s) { System.out.println("UI log " + s); }
   public void event(int t, Object a, Object b) {}
   public static void main(String[] a) throws Exception {
+    try { run(); } catch (Throwable t) { t.printStackTrace(); System.out.println("TEST FAILED: " + t); System.exit(1); }
+    System.exit(0);
+  }
+  static void run() throws Exception {
     E2E ui = new E2E();
     Client c = new Client(ui, "jecka", "hunter2", "127.0.0.1", 22420, 0, Store.defaultDir());
     System.out.println("dir " + c.downloadDir);
