@@ -17,6 +17,8 @@
   - Background: phone theme, a colour (sliders with preview, or type RRGGBB), or an image from the
     phone that fills (crops), stretches or tiles, with adjustable dimming toward darker/lighter/auto
   - Name colours are nudged lighter or darker when they'd be hard to read on the background
+  - Live preview at the top of Chat look and in the colour picker (drawn by the app, so it shows on
+    phones that hide image items in forms)
   - Optional box behind each message, with adjustable opacity (0% = off to 100% = solid), so busy
     backgrounds don't get in the way of the text
   - Background pictures over about 2 megapixels are refused up front (read from the file header,

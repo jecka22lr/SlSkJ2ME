@@ -64,7 +64,7 @@ final class SocialUI implements CommandListener {
     private ChoiceGroup gDimDir;
     private javax.microedition.lcdui.Gauge gBoxes;
     private TextField fHex;
-    private javax.microedition.lcdui.ImageItem preview;
+    private Preview preview, lookPreview;
     private int pickColor;
     private String pickOpenedHex = "";
     private boolean pickTyped;
@@ -225,6 +225,8 @@ final class SocialUI implements CommandListener {
         gBg.setSelectedIndex(ChatColors.bgMode, true);
         gFit = new ChoiceGroup("Image", ChoiceGroup.POPUP, new String[] { "Fill (crop)", "Stretch", "Tile" }, null);
         gFit.setSelectedIndex(ChatColors.fit, true);
+        lookPreview = new Preview(false);
+        colorsF.append(lookPreview);
         colorsF.append(gStyle);
         colorsF.append(gOwn);
         colorsF.append(gOnline);
@@ -242,6 +244,7 @@ final class SocialUI implements CommandListener {
             public void itemStateChanged(javax.microedition.lcdui.Item it) {
                 if (it == gDim) gDim.setLabel("Image dimming (" + gDim.getValue() * 10 + "%)");
                 if (it == gBoxes) gBoxes.setLabel(boxLabel(gBoxes.getValue() * 10));
+                if (lookPreview != null) lookPreview.update();
             }
         });
         colorsF.append(new StringItem(null, "Colour: #" + hex(ChatColors.bgColor)
@@ -297,7 +300,7 @@ final class SocialUI implements CommandListener {
         gG = new javax.microedition.lcdui.Gauge("Green", true, 15, ((pickColor >> 8) & 255) / 17);
         gB = new javax.microedition.lcdui.Gauge("Blue", true, 15, (pickColor & 255) / 17);
         fHex = new TextField("Or type it (RRGGBB)", hex(pickColor), 6, TextField.ANY);
-        preview = new javax.microedition.lcdui.ImageItem("Preview", swatch(pickColor), javax.microedition.lcdui.Item.LAYOUT_CENTER, "");
+        preview = new Preview(true);
         pickF.append(preview);
         pickF.append(gR);
         pickF.append(gG);
@@ -321,30 +324,140 @@ final class SocialUI implements CommandListener {
                     pickColor = (gR.getValue() * 17) << 16 | (gG.getValue() * 17) << 8 | gB.getValue() * 17;
                     fHex.setString(hex(pickColor));
                 }
-                preview.setImage(swatch(pickColor));
+                preview.update();
             }
         });
         d.setCurrent(pickF);
     }
 
-    /** A small preview: the colour with sample text and a name in the chosen name colour. */
-    private javax.microedition.lcdui.Image swatch(int c) {
-        javax.microedition.lcdui.Image img = javax.microedition.lcdui.Image.createImage(150, 34);
-        javax.microedition.lcdui.Graphics g = img.getGraphics();
-        g.setColor(c);
-        g.fillRect(0, 0, 150, 34);
-        int fg = ChatColors.lum(c) < 128 ? 0xf0f0f0 : 0x101010;
-        javax.microedition.lcdui.Font f = javax.microedition.lcdui.Font.getFont(javax.microedition.lcdui.Font.FACE_PROPORTIONAL,
-            javax.microedition.lcdui.Font.STYLE_BOLD, javax.microedition.lcdui.Font.SIZE_SMALL);
-        g.setFont(f);
-        g.setColor(ChatColors.readable(ChatColors.VALUES[gOnline != null ? gOnline.getSelectedIndex() : ChatColors.online], c));
-        g.drawString("friend:", 4, 9, javax.microedition.lcdui.Graphics.TOP | javax.microedition.lcdui.Graphics.LEFT);
-        int x = 4 + f.stringWidth("friend: ");
-        g.setFont(javax.microedition.lcdui.Font.getFont(javax.microedition.lcdui.Font.FACE_PROPORTIONAL,
-            javax.microedition.lcdui.Font.STYLE_PLAIN, javax.microedition.lcdui.Font.SIZE_SMALL));
-        g.setColor(fg);
-        g.drawString("hello", x, 9, javax.microedition.lcdui.Graphics.TOP | javax.microedition.lcdui.Graphics.LEFT);
-        return javax.microedition.lcdui.Image.createImage(img);
+    /** Colour the picker would apply right now (read from the controls, in case the phone never told us). */
+    private int pickerColor() {
+        int fromGauges = (gR.getValue() * 17) << 16 | (gG.getValue() * 17) << 8 | gB.getValue() * 17;
+        String hx = fHex.getString().trim();
+        if (pickTyped || (!hx.equalsIgnoreCase(pickOpenedHex) && !hx.equalsIgnoreCase(hex(pickColor)))) {
+            try { if (hx.length() == 6) return Integer.parseInt(hx, 16) & 0xffffff; } catch (Exception e) {}
+        }
+        return fromGauges;
+    }
+
+    /**
+     * Live preview drawn by the app (a CustomItem): some phones don't show ImageItems in forms.
+     * colourOnly: the colour picker's sample. Otherwise: a mini chat using everything set on the Chat look form.
+     */
+    private final class Preview extends javax.microedition.lcdui.CustomItem {
+        private final boolean colourOnly;
+
+        Preview(boolean colourOnly) {
+            super("Preview");
+            this.colourOnly = colourOnly;
+        }
+
+        void update() { repaint(); }
+
+        protected int getMinContentWidth() { return 120; }
+        protected int getMinContentHeight() { return colourOnly ? 36 : 66; }
+        protected int getPrefContentWidth(int h) { return 220; }
+        protected int getPrefContentHeight(int w) { return colourOnly ? 36 : 66; }
+
+        protected void paint(javax.microedition.lcdui.Graphics g, int w, int h) {
+            try {
+                if (colourOnly) paintColour(g, w, h);
+                else paintLook(g, w, h);
+            } catch (Throwable e) {
+                g.setColor(0xffffff); g.fillRect(0, 0, w, h);
+                g.setColor(0x000000); g.drawString("(preview failed)", 2, 2, 20);
+            }
+        }
+
+        private void paintColour(javax.microedition.lcdui.Graphics g, int w, int h) {
+            int c = pickerColor();
+            g.setColor(c);
+            g.fillRect(0, 0, w, h);
+            int fg = ChatColors.lum(c) < 128 ? 0xf0f0f0 : 0x101010;
+            sample(g, 4, 4, "friend", "hello", ChatColors.readable(ChatColors.VALUES[ChatColors.online], c), fg);
+            sample(g, 4, 4 + lineH(), "you", "hi!", ChatColors.readable(ChatColors.VALUES[ChatColors.own], c), fg);
+            g.setColor(fg);
+            g.drawRect(0, 0, w - 1, h - 1);
+        }
+
+        /** Temporarily apply the form's choices, draw a tiny chat, then put the saved settings back. */
+        private void paintLook(javax.microedition.lcdui.Graphics g, int w, int h) {
+            int sStyle = ChatColors.style, sOwn = ChatColors.own, sOn = ChatColors.online, sOff = ChatColors.offline,
+                sBg = ChatColors.bgMode, sFit = ChatColors.fit, sDim = ChatColors.dim, sDir = ChatColors.dimDir, sBox = ChatColors.boxes;
+            try {
+                ChatColors.style = gStyle.getSelectedIndex();
+                ChatColors.own = gOwn.getSelectedIndex();
+                ChatColors.online = gOnline.getSelectedIndex();
+                ChatColors.offline = gOffline.getSelectedIndex();
+                ChatColors.bgMode = gBg.getSelectedIndex();
+                ChatColors.fit = gFit.getSelectedIndex();
+                ChatColors.dim = gDim.getValue() * 10;
+                ChatColors.dimDir = gDimDir.getSelectedIndex();
+                ChatColors.boxes = gBoxes.getValue() * 10;
+                if (ChatColors.style == ChatColors.STYLE_NATIVE) {
+                    g.setColor(0xffffff); g.fillRect(0, 0, w, h);
+                    g.setColor(0x000000);
+                    g.drawString("Native: looks like your", 4, 4, 20);
+                    g.drawString("phone's own screens", 4, 4 + lineH(), 20);
+                    return;
+                }
+                javax.microedition.lcdui.Image img = null;
+                if (ChatColors.bgMode == ChatColors.BG_IMAGE) img = ChatColors.backgroundImage(w, h);
+                int bg = ChatColors.background(), fg = ChatColors.text();
+                if (img != null) g.drawImage(img, 0, 0, 20);
+                else { g.setColor(bg); g.fillRect(0, 0, w, h); }
+                int lh = lineH();
+                String[][] rows = { { c().username, "hi all", "own" }, { "friend", "hey!", "on" }, { "gone", "bye", "off" } };
+                int box = ChatColors.lum(fg) >= 128 ? 0x000000 : 0xffffff;
+                for (int i = 0; i < rows.length; i++) {
+                    int y = 3 + i * (lh + 2), nb = bg;
+                    if (ChatColors.boxes > 0) {
+                        int tw = font().stringWidth(rows[i][0] + ": " + rows[i][1]) + 10;
+                        boxFill(g, 1, y - 1, Math.min(w - 2, tw), lh + 1, (ChatColors.boxAlpha() << 24) | box);
+                        nb = ChatColors.mix(bg, box, ChatColors.boxes);
+                    }
+                    int pal = rows[i][2].equals("own") ? ChatColors.own : rows[i][2].equals("on") ? ChatColors.online : ChatColors.offline;
+                    sample(g, 4, y, rows[i][0], rows[i][1], ChatColors.readable(ChatColors.VALUES[pal], nb), fg);
+                }
+                if (ChatColors.bgMode == ChatColors.BG_IMAGE && img == null) {
+                    g.setColor(fg);
+                    g.drawString(ChatColors.bgImage.length() == 0 ? "(no image picked)" : "(image loading)", w - 4, h - 2, 40);
+                }
+            } finally {
+                ChatColors.style = sStyle; ChatColors.own = sOwn; ChatColors.online = sOn; ChatColors.offline = sOff;
+                ChatColors.bgMode = sBg; ChatColors.fit = sFit; ChatColors.dim = sDim; ChatColors.dimDir = sDir; ChatColors.boxes = sBox;
+            }
+        }
+
+        private javax.microedition.lcdui.Font font() {
+            return javax.microedition.lcdui.Font.getFont(javax.microedition.lcdui.Font.FACE_PROPORTIONAL,
+                javax.microedition.lcdui.Font.STYLE_PLAIN, javax.microedition.lcdui.Font.SIZE_SMALL);
+        }
+
+        private int lineH() { return font().getHeight() + 1; }
+
+        private void sample(javax.microedition.lcdui.Graphics g, int x, int y, String name, String text, int nameColor, int fg) {
+            javax.microedition.lcdui.Font f = font();
+            javax.microedition.lcdui.Font b = javax.microedition.lcdui.Font.getFont(f.getFace(), javax.microedition.lcdui.Font.STYLE_BOLD, f.getSize());
+            g.setFont(b);
+            g.setColor(nameColor);
+            g.drawString(name + ":", x, y, 20);
+            int nx = x + b.stringWidth(name + ": ");
+            g.setFont(f);
+            g.setColor(fg);
+            g.drawString(text, nx, y, 20);
+        }
+
+        private void boxFill(javax.microedition.lcdui.Graphics g, int x, int y, int bw, int bh, int argb) {
+            try {
+                int[] px = new int[bw * bh];
+                for (int k = 0; k < px.length; k++) px[k] = argb;
+                g.drawImage(javax.microedition.lcdui.Image.createRGBImage(px, bw, bh, true), x, y, 20);
+            } catch (Throwable e) {
+                g.setColor(argb & 0xffffff);
+                g.fillRect(x, y, bw, bh);
+            }
+        }
     }
 
     private void pickImage() {
@@ -370,6 +483,7 @@ final class SocialUI implements CommandListener {
                                     m.alert("Background image", err, colorsF);
                                 } else {
                                     gBg.setSelectedIndex(ChatColors.BG_IMAGE, true);
+                                    if (lookPreview != null) lookPreview.update();
                                     d.setCurrent(colorsF);
                                 }
                             }
@@ -1016,14 +1130,9 @@ final class SocialUI implements CommandListener {
             reopenChat();
         } else if (s == pickF) {
             if (c == cColorsOk) {
-                // read the controls themselves: not every phone reports slider moves to the listener
-                int fromGauges = (gR.getValue() * 17) << 16 | (gG.getValue() * 17) << 8 | gB.getValue() * 17;
-                int chosen = fromGauges;
-                String hx = fHex.getString().trim();
-                if (!hx.equalsIgnoreCase(pickOpenedHex) && !hx.equalsIgnoreCase(hex(pickColor)) || pickTyped) {
-                    try { if (hx.length() == 6) chosen = Integer.parseInt(hx, 16) & 0xffffff; } catch (Exception e) {}
-                }
+                int chosen = pickerColor(); // read the controls themselves: not every phone reports slider moves
                 ChatColors.bgColor = chosen;
+                if (lookPreview != null) lookPreview.update();
                 gBg.setSelectedIndex(ChatColors.BG_COLOR, true);
             }
             d.setCurrent(colorsF);
