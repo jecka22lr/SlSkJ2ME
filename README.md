@@ -103,4 +103,6 @@ Protocol reference: the Nicotine+ project's Soulseek protocol documentation.
 
 ## License
 
-MIT
+GNU General Public License v3.0 or later. See `LICENSE`.
+
+Copyright (C) 2026 jecka22lr. Versions up to Beta 0.4.2 were released under the MIT License.

@@ -27,6 +27,7 @@
   and then fail with "File not shared"
 - My downloads > Retry restarts the automatic retries from zero
 - No longer a beta: the About screen just says the version
+- License changed from MIT to GPL-3.0-or-later
 
 ## Beta 0.5.0
 
