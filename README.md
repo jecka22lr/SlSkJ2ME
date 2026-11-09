@@ -35,6 +35,9 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - Play a finished download in the phone's own music player
 - Upload/download speed limits and a cap on files per person; the share scan is saved between logins
 - Filenames from old clients that aren't UTF-8 show readably and still download
+- Interests: likes and dislikes, personal and global recommendations, similar users, who likes what
+- Private rooms: create, invite and remove members, see private rooms you belong to, leave for good
+- Chat and messages open at the newest line and scroll with Up/Down or by dragging
 
 Uploads only reach people with an open port when you're on mobile data (you can't accept incoming
 connections behind carrier NAT). Big share lists may not fit in phone memory when browsing.
@@ -66,7 +69,7 @@ Runs on a desktop JVM with a small shim standing in for the phone's sockets and 
 MD5 and the zlib decoder against the JDK, the writable-folder fallback, and a full
 login, search, download and resume against `test/mock.py` (a mock server plus one peer), and
 `test/mock2.py` for rooms, PMs, profiles, browsing both ways, wishlist, distributed search, uploads,
-buddies, ignore/ban and room/buddy search. `NewT` covers `.part` files, folders, the speed limiter,
+buddies, ignore/ban, room/buddy search, interests/recommendations and private rooms. `NewT` covers `.part` files, folders, the speed limiter,
 the share cache and the non-UTF-8 filename fallback.
 
 ## Emulator screenshots
@@ -80,7 +83,9 @@ server, so screens can be checked without a phone. See `test/emu/README.md`.
 | --- | --- |
 | `Client.java` | Protocol core: server connection, search, peers, transfers, chat, uploads. No UI code. |
 | `Shares.java` | Shared file index: scan, search matching, share list / search responses |
-| `SocialUI.java` | Rooms, messages, users, browse, wishlist, profile & sharing, uploads screens |
+| `SocialUI.java` | Rooms, messages, users, buddies, browse, wishlist, profile & sharing, uploads screens |
+| `InterestsUI.java` | Likes/dislikes, recommendations, similar users |
+| `ChatView.java` | Scrollable chat/message view that opens at the newest line |
 | `PeerConn.java` | Peer connections: PierceFirewall / PeerInit, messages ("P") and file data ("F") |
 | `Inflate.java` | zlib decoder (search results are compressed, CLDC has no java.util.zip) |
 | `MD5.java` | Login hash |

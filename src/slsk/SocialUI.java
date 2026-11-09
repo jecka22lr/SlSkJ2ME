@@ -48,15 +48,20 @@ final class SocialUI implements CommandListener {
     private final Command cSearchRoom = new Command("Search", "Search this room", Command.SCREEN, 4);
     private final Command cSearchBuddies = new Command("Search", "Search buddies' files", Command.SCREEN, 3);
     private final Command cBlocked = new Command("Blocked", "Ignored & banned", Command.SCREEN, 4);
+    private final Command cNewPriv = new Command("Private", "New private room", Command.SCREEN, 4);
+    private final Command cAddMember = new Command("Invite", "Add member", Command.SCREEN, 5);
+    private final Command cMembers = new Command("Members", Command.SCREEN, 6);
+    private final Command cQuitPriv = new Command("Quit", "Leave private room for good", Command.SCREEN, 7);
+    private List membersL;
 
     // rooms
     private List roomsL, usersL;
-    private Form roomF;
+    private ChatView roomF;
     private Room curRoom;
     private final Vector roomRows = new Vector(); // String room names in roomsL order
     // messages
     private List convosL;
-    private Form convoF;
+    private ChatView convoF;
     private Convo curConvo;
     // text input (shared)
     private TextBox inputTB;
@@ -111,6 +116,7 @@ final class SocialUI implements CommandListener {
         if (roomsL == null) {
             roomsL = new List("Chat rooms", List.IMPLICIT);
             roomsL.addCommand(cJoinName);
+            roomsL.addCommand(cNewPriv);
             roomsL.addCommand(cRefresh);
             roomsL.addCommand(cBack);
             roomsL.setCommandListener(this);
@@ -129,6 +135,12 @@ final class SocialUI implements CommandListener {
             Room r = (Room) e.nextElement();
             roomsL.append("> " + r.name + " (" + r.users.size() + ")" + (r.unread > 0 ? " *" : ""), null);
             roomRows.addElement(r.name);
+        }
+        for (int i = 0; i < cl.privRooms.length; i++) {
+            String n = cl.privRooms[i];
+            if (cl.rooms.containsKey(n)) continue;
+            roomsL.append("[private] " + n + " (" + cl.privCounts[i] + ")" + (cl.ownedRooms.contains(n) ? " owner" : ""), null);
+            roomRows.addElement(n);
         }
         // biggest public rooms first; 150 is plenty for a phone screen
         String[] names = cl.roomNames;
@@ -150,16 +162,31 @@ final class SocialUI implements CommandListener {
     private void openRoom(Room r) {
         curRoom = r;
         r.unread = 0;
-        roomF = new Form(r.name);
-        for (int i = Math.max(0, r.lines.size() - 40); i < r.lines.size(); i++)
-            roomF.append(new StringItem(null, r.lines.elementAt(i) + "\n"));
+        roomF = new ChatView(r.name, c().username);
+        roomF.setLines(r.lines);
         roomF.addCommand(cSay);
         roomF.addCommand(cUsers);
         roomF.addCommand(cLeave);
         roomF.addCommand(cSearchRoom);
+        if (c().isPrivate(r.name) || r.members != null) {
+            roomF.addCommand(cAddMember);
+            roomF.addCommand(cMembers);
+            roomF.addCommand(cQuitPriv);
+        }
         roomF.addCommand(cBack);
         roomF.setCommandListener(this);
         d.setCurrent(roomF);
+    }
+
+    private void showMembers() {
+        Vector v = curRoom.members;
+        membersL = new List(curRoom.name + " members", List.IMPLICIT);
+        if (v != null) for (int i = 0; i < v.size(); i++) membersL.append((String) v.elementAt(i), null);
+        if (v == null || v.size() == 0) membersL.append("(list not received yet)", null);
+        if (c().ownedRooms.contains(curRoom.name)) membersL.addCommand(cRemove);
+        membersL.addCommand(cBack);
+        membersL.setCommandListener(this);
+        d.setCurrent(membersL);
     }
 
     private void showRoomUsers() {
@@ -189,8 +216,8 @@ final class SocialUI implements CommandListener {
     void openConvo(Convo cv) {
         curConvo = cv;
         cv.unread = 0;
-        convoF = new Form(cv.user);
-        for (int i = 0; i < cv.lines.size(); i++) convoF.append(new StringItem(null, cv.lines.elementAt(i) + "\n"));
+        convoF = new ChatView(cv.user, c().username);
+        convoF.setLines(cv.lines);
         convoF.addCommand(cSay);
         convoF.addCommand(cProfile);
         convoF.addCommand(cBack);
@@ -221,6 +248,7 @@ final class SocialUI implements CommandListener {
         userL.append(cl.isBuddy(user) ? "Remove from buddies" : "Add to buddies", null);
         userL.append(cl.ignored.contains(user) ? "Stop ignoring" : "Ignore (hide chat & messages)", null);
         userL.append(cl.banned.contains(user) ? "Unban" : "Ban (no browsing or downloads)", null);
+        userL.append("Their interests", null);
         userL.addCommand(cBack);
         userL.setCommandListener(this);
         d.setCurrent(userL);
@@ -632,8 +660,7 @@ final class SocialUI implements CommandListener {
             Room r = (Room) a;
             if (r == curRoom && cur == roomF) {
                 r.unread = 0;
-                roomF.append(new StringItem(null, b + "\n"));
-                while (roomF.size() > 40) roomF.delete(0);
+                roomF.add(String.valueOf(b));
             }
             break;
         }
@@ -641,7 +668,7 @@ final class SocialUI implements CommandListener {
             Convo cv = (Convo) a;
             if (cv == curConvo && cur == convoF) {
                 cv.unread = 0;
-                convoF.append(new StringItem(null, cv.lines.lastElement() + "\n"));
+                convoF.add(String.valueOf(cv.lines.lastElement()));
             } else {
                 m.notifyUser("Message from " + cv.user + ": " + b);
                 if (cur == convosL) showConvos();
@@ -657,6 +684,10 @@ final class SocialUI implements CommandListener {
             }
             break;
         }
+        case Client.EV_PRIVROOM:
+            m.notifyUser((String) a);
+            if (cur == roomsL) fillRooms();
+            break;
         case Client.EV_BUDDY: {
             UserInfo i = (UserInfo) a;
             m.notifyUser(i.user + (i.status == 0 ? " went offline" : " is online"));
@@ -696,7 +727,7 @@ final class SocialUI implements CommandListener {
             String t = inputTB.getString().trim();
             if (t.length() == 0) return;
             switch (inputMode) {
-            case 1: cl.say(curRoom.name, t); d.setCurrent(roomF); break;
+            case 1: cl.say(curRoom.name, t); roomF.toBottom(); d.setCurrent(roomF); break;
             case 2:
                 cl.sendPM(curConvo.user, t);
                 openConvo(curConvo);
@@ -709,6 +740,16 @@ final class SocialUI implements CommandListener {
                 inputTB.setTitle("Joining " + t + "...");
                 break;
             case 8: cl.addBuddy(t); savePeople(cl); showBuddies(); break;
+            case 11:
+                cl.createPrivateRoom(t);
+                inputMode = 6; // the JoinRoom reply opens it like a normal join
+                inputTB.setTitle("Creating " + t + "...");
+                cl.requestRoomList();
+                break;
+            case 12:
+                cl.privateRoomAdd(curRoom.name, t);
+                m.alert("Private room", "Invited " + t + " to " + curRoom.name, roomF);
+                break;
             case 9: cl.roomSearch(curRoom.name, t); m.showResults("Room " + curRoom.name + ": " + t); break;
             case 10: cl.buddySearch(t); m.showResults("Buddies: " + t); break;
             case 7:
@@ -724,6 +765,7 @@ final class SocialUI implements CommandListener {
         if (s == roomsL) {
             if (c == cBack) m.showMain();
             else if (c == cJoinName) input("Join room", "", 6, roomsL);
+            else if (c == cNewPriv) input("New private room name", "", 11, roomsL);
             else if (c == cRefresh) { cl.requestRoomList(); fillRooms(); }
             else if (c == List.SELECT_COMMAND) {
                 int i = roomsL.getSelectedIndex();
@@ -739,6 +781,19 @@ final class SocialUI implements CommandListener {
             else if (c == cUsers) showRoomUsers();
             else if (c == cLeave) { cl.leaveRoom(curRoom.name); cl.rooms.remove(curRoom.name); showRooms(); }
             else if (c == cSearchRoom) input("Search " + curRoom.name, "", 9, roomF);
+            else if (c == cAddMember) input("Invite to " + curRoom.name + " (username)", "", 12, roomF);
+            else if (c == cMembers) showMembers();
+            else if (c == cQuitPriv) { cl.privateRoomQuit(curRoom.name); cl.requestRoomList(); showRooms(); }
+        } else if (s == membersL) {
+            int i = membersL.getSelectedIndex();
+            Vector v = curRoom.members;
+            String u = v != null && i >= 0 && i < v.size() ? (String) v.elementAt(i) : null;
+            if (c == cBack) d.setCurrent(roomF);
+            else if (c == cRemove && u != null) {
+                cl.privateRoomRemove(curRoom.name, u);
+                v.removeElement(u);
+                showMembers();
+            } else if (c == List.SELECT_COMMAND && u != null) showUser(u, membersL);
         } else if (s == usersL) {
             if (c == cBack) d.setCurrent(roomF);
             else if (c == List.SELECT_COMMAND && usersL.getSelectedIndex() >= 0)
@@ -798,6 +853,7 @@ final class SocialUI implements CommandListener {
                     savePeople(cl);
                     showUserKeep(6);
                     break;
+                case 7: m.interests.showTheirs(curUser, userL); break;
                 }
             }
         } else if (s == profileF) {

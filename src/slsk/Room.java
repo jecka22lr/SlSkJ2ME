@@ -8,6 +8,8 @@ public final class Room {
     public final Vector users = new Vector();
     public final Vector lines = new Vector(); // String
     public int unread;
+    /** Members of a private room (null for public rooms). */
+    public Vector members;
 
     Room(String name) { this.name = name; }
 

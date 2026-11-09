@@ -61,7 +61,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private Form connF;
 
     private static final String[] MENU = { "Search", "Results", "My downloads", "Uploads", "Chat rooms", "Messages",
-        "Find user", "Buddies", "Wishlist", "Profile & sharing", "Log", "Save location", "About", "Log out" };
+        "Find user", "Buddies", "Interests", "Wishlist", "Profile & sharing", "Log", "Save location", "About", "Log out" };
+    InterestsUI interests;
     private final Command cPlay = new Command("Play", "Play / open file", Command.ITEM, 1);
     private final Command cHistory = new Command("History", "Recent searches", Command.SCREEN, 2);
     private final Command cMore = new Command("More", "More filters", Command.SCREEN, 3);
@@ -98,6 +99,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         started = true;
         display = Display.getDisplay(this);
         social = new SocialUI(this, display);
+        interests = new InterestsUI(this, social, display);
         loadStrings("slskme-hist", history);
         loadFilters();
         buildLogin();
@@ -212,7 +214,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         mainL.set(5, pm > 0 ? "Messages (" + pm + " new)" : "Messages", null);
         int on = social.buddiesOnline();
         mainL.set(7, client.buddies.size() == 0 ? "Buddies" : "Buddies (" + on + "/" + client.buddies.size() + " online)", null);
-        mainL.set(8, "Wishlist (" + client.wishResults.size() + " found)", null);
+        mainL.set(9, "Wishlist (" + client.wishResults.size() + " found)", null);
     }
 
     void showMain() {
@@ -391,7 +393,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         Runtime rt = Runtime.getRuntime();
         String platform = System.getProperty("microedition.platform");
         aboutF = new Form("About");
-        aboutF.append(new StringItem("SlskME", "Beta " + (ver == null ? "?" : ver) + "\n"));
+        aboutF.append(new StringItem("SlskME", (ver == null ? "?" : ver) + "\n"));
         aboutF.append(new StringItem(null, "A Soulseek client for J2ME phones. Talks to the Soulseek network directly, no proxy.\n"));
         aboutF.append(new StringItem("Author", "jecka22lr\n"));
         aboutF.append(new StringItem("Source", "github.com/jecka22lr/SlSkJ2ME\n"));
@@ -478,6 +480,12 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     }
 
     private final Command cOkMore = new Command("OK", Command.OK, 1);
+
+    /** Search from elsewhere (an interest, say). */
+    void searchFor(String q) {
+        searchTB.setString(q);
+        runSearch(q);
+    }
 
     private void runSearch(String q) {
         history.removeElement(q);
@@ -638,12 +646,13 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             case 5: social.showConvos(); break;
             case 6: social.findUser(); break;
             case 7: social.showBuddies(); break;
-            case 8: social.showWishlist(); break;
-            case 9: social.showMyProfile(); break;
-            case 10: display.setCurrent(logF); break;
-            case 11: showFolders(); break;
-            case 12: showAbout(mainL); break;
-            case 13:
+            case 8: interests.show(); break;
+            case 9: social.showWishlist(); break;
+            case 10: social.showMyProfile(); break;
+            case 11: display.setCurrent(logF); break;
+            case 12: showFolders(); break;
+            case 13: showAbout(mainL); break;
+            case 14:
                 saveQueue();
                 client.logout();
                 client = null;
@@ -764,7 +773,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             Transfer t = selectedTransfer();
             if (c == cInfo && t != null) showInfo("Download", t.details(), dlL);
             else if (c == cPlay && t != null) play(t);
-            else if (c == cRetry && t != null) { client.queue(t); refreshDownloads(); }
+            else if (c == cRetry && t != null) { t.retries = 0; t.failedAt = 0; client.queue(t); refreshDownloads(); }
             else if (c == cPlace && t != null) client.askPlace(t);
             else if (c == cRemove && t != null) { client.remove(t); refreshDownloads(); }
             else if (c == cClear) {
@@ -804,6 +813,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         social.applyLimits(client);
         social.loadWishlist(client.wishlist);
         social.loadPeople(client);
+        interests.load(client);
         connF = new Form("Connecting");
         connF.append("Logging in to " + fHost.getString() + "...");
         connF.addCommand(cCancel);
@@ -1031,6 +1041,10 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                     Displayable cur = display.getCurrent();
                     if (cur != null && !(cur instanceof Alert)) cur.setTicker(t);
                     if (t == null) refreshMain();
+                    return;
+                }
+                if (type == Client.EV_RECS || type == Client.EV_SIMILAR || type == Client.EV_INTERESTS) {
+                    interests.onEvent(type, a, b);
                     return;
                 }
                 social.onEvent(type, a, b);

@@ -2,7 +2,7 @@ package slsk;
 import java.util.Vector;
 public class E2E2 implements Client.Listener {
   volatile boolean in; volatile int ok;
-  volatile Object browse; volatile UserInfo info; volatile int wish, roomMsgs; volatile boolean pm, upDone, reconnected; volatile String buddyEv;
+  volatile Object browse; volatile UserInfo info; volatile int wish, roomMsgs; volatile boolean pm, upDone, reconnected; volatile String buddyEv; volatile Object recs, similar, itemUsers, theirs; volatile String privMsg;
   public void loggedIn(boolean o, String m) { in = o; }
   public void disconnected(String w) { System.out.println("UI disconnected " + w); }
   public void result(Result r) {}
@@ -17,6 +17,10 @@ public class E2E2 implements Client.Listener {
       case Client.EV_WISH: wish++; System.out.println("UI wish " + ((Result) a).file); break;
       case Client.EV_UPLOAD: Upload u = (Upload) a; System.out.println("UI upload " + u.label() + " " + u.info); if (u.state == Upload.DONE) upDone = true; break;
       case Client.EV_BUDDY: buddyEv = ((UserInfo) a).user + ":" + ((UserInfo) a).status; System.out.println("UI buddy " + buddyEv); break;
+      case Client.EV_RECS: if ("rec".equals(a)) recs = b; break;
+      case Client.EV_SIMILAR: if ("similar".equals(a)) similar = b; else itemUsers = b; break;
+      case Client.EV_INTERESTS: theirs = b; break;
+      case Client.EV_PRIVROOM: privMsg = (String) a; break;
       case Client.EV_CONN: System.out.println("UI conn " + a); if ("Reconnected".equals(a)) reconnected = true; break;
       case Client.EV_ROOMLIST: System.out.println("UI rooms " + ((Client) null == null ? "" : "")); break;
     }
@@ -37,6 +41,7 @@ public class E2E2 implements Client.Listener {
     c.wishlist.addElement("rare album");
     c.buddies.addElement("buddy1");
     c.setIgnored("spammer", true);
+    c.likes.addElement("tape moths");
     c.connect();
     waitFor(() -> ui.in, "login");
     waitFor(() -> c.roomNames.length == 3, "room list");
@@ -62,6 +67,21 @@ public class E2E2 implements Client.Listener {
     Room nk = (Room) c.rooms.get("nokia");
     for (int i = 0; i < nk.lines.size(); i++) if (String.valueOf(nk.lines.elementAt(i)).indexOf("spammer") >= 0) throw new Error("ignored user's line shown");
     System.out.println("E2E2 ok ignored user hidden");
+    c.getRecommendations(false);
+    waitFor(() -> ui.recs != null && ((java.util.Vector) ui.recs).size() == 2
+        && "shoegaze".equals(((Object[]) ((java.util.Vector) ui.recs).elementAt(0))[0]), "recommendations");
+    c.getSimilarUsers();
+    waitFor(() -> ui.similar != null && ((java.util.Vector) ui.similar).contains("peer1"), "similar users");
+    c.getItemSimilarUsers("tape moths");
+    waitFor(() -> ui.itemUsers != null && ((java.util.Vector) ui.itemUsers).size() == 2, "who likes an item");
+    c.getUserInterests("peer1");
+    waitFor(() -> ui.theirs != null && ((java.util.Vector[]) ui.theirs)[0].contains("symbian") && ((java.util.Vector[]) ui.theirs)[1].contains("ads"), "their interests");
+    c.createPrivateRoom("secret");
+    waitFor(() -> c.rooms.get("secret") != null && ((Room) c.rooms.get("secret")).members != null, "private room created");
+    c.requestRoomList();
+    waitFor(() -> c.privRooms.length == 2 && c.ownedRooms.contains("secret") && c.isPrivate("friends"), "private rooms in room list");
+    c.privateRoomAdd("secret", "peer1");
+    waitFor(() -> ui.privMsg != null && ui.privMsg.indexOf("friends") >= 0, "added-to-room notice");
     c.roomSearch("nokia", "tape");
     c.buddySearch("demo");
     Thread.sleep(2500); // let the banned searcher try again

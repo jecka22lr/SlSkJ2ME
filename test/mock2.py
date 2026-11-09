@@ -50,7 +50,12 @@ def server(c):
                 ok('share_counts', (d, f) == (2, 3))
                 c.sendall(frame(102, struct.pack('<I', 1) + s('parent') + LO + struct.pack('<I', PARENT)))
         elif code == 14:
-            room, _ = rstr(p, 0)
+            room, o = rstr(p, 0)
+            if room == 'secret':
+                ok('priv_create', len(p) >= o + 4 and struct.unpack_from('<I', p, o)[0] == 1)
+                c.sendall(frame(14, s(room) + struct.pack('<I', 1) + s('jecka')))
+                c.sendall(frame(133, s(room) + struct.pack('<I', 1) + s('jecka')))
+                continue
             if st.get('dropped'): ok('reconnect_rejoin', room == 'nokia')
             c.sendall(frame(14, s(room) + struct.pack('<I', 2) + s('peer1') + s('jecka')))
             c.sendall(frame(13, s(room) + s('spammer') + s('buy my stuff')))  # ignored by the client
@@ -75,6 +80,29 @@ def server(c):
                 def later(cc=c):
                     time.sleep(1.0); cc.sendall(frame(7, s('buddy1') + struct.pack('<I', 0) + b'\x00'))  # goes offline
                 threading.Thread(target=later, daemon=True).start()
+        elif code == 51:
+            item, _ = rstr(p, 0); ok('like_sent', item == 'tape moths')
+        elif code == 141:
+            ok('priv_invites_on', p == b'\x01')
+        elif code == 54:
+            c.sendall(frame(54, struct.pack('<I', 2) + s('shoegaze') + struct.pack('<i', 12) + s('dream pop') + struct.pack('<i', 7) + struct.pack('<I', 0)))
+        elif code == 110:
+            c.sendall(frame(110, struct.pack('<I', 1) + s('peer1') + struct.pack('<I', 3)))
+        elif code == 112:
+            item, _ = rstr(p, 0)
+            c.sendall(frame(112, s(item) + struct.pack('<I', 2) + s('peer1') + s('nokiafan')))
+        elif code == 57:
+            u, _ = rstr(p, 0)
+            c.sendall(frame(57, s(u) + struct.pack('<I', 2) + s('nokias') + s('symbian') + struct.pack('<I', 1) + s('ads')))
+        elif code == 64:
+            # public rooms, then private rooms we own, then private rooms we're a member of
+            c.sendall(frame(64, struct.pack('<I', 1) + s('nokia') + struct.pack('<II', 1, 12)
+                + struct.pack('<I', 1) + s('secret') + struct.pack('<II', 1, 1)
+                + struct.pack('<I', 1) + s('friends') + struct.pack('<II', 1, 4)
+                + struct.pack('<I', 0)))
+        elif code == 134:
+            room, o = rstr(p, 0); u, _ = rstr(p, o); ok('priv_invite', room == 'secret' and u == 'peer1')
+            c.sendall(frame(139, s('friends')))
         elif code == 120:
             room, o = rstr(p, 0); tok, = struct.unpack_from('<I', p, o); q, _ = rstr(p, o + 4)
             ok('room_search', room == 'nokia' and q == 'tape')
@@ -175,7 +203,7 @@ def accept_loop():
         cc = ls.accept()[0]
         threading.Thread(target=server, args=(cc,), daemon=True).start()
 threading.Thread(target=accept_loop, daemon=True).start()
-need = ['watch_buddy','room_search','buddy_search','ban_denies_download','ban_empty_browse','reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
+need = ['like_sent','priv_invites_on','priv_create','priv_invite','watch_buddy','room_search','buddy_search','ban_denies_download','ban_empty_browse','reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
 t0 = time.time()
 while time.time() - t0 < float(sys.argv[1]) and not all(k in checks for k in need): time.sleep(0.2)
 missing = [k for k in need if k not in checks]

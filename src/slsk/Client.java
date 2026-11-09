@@ -25,7 +25,8 @@ public final class Client implements Runnable {
     }
 
     public static final int EV_ROOMLIST = 1, EV_ROOM = 2, EV_ROOMMSG = 3, EV_PM = 4, EV_USERINFO = 5,
-        EV_BROWSE = 6, EV_WISH = 7, EV_SHARES = 8, EV_UPLOAD = 9, EV_CONN = 10, EV_BUDDY = 11;
+        EV_BROWSE = 6, EV_WISH = 7, EV_SHARES = 8, EV_UPLOAD = 9, EV_CONN = 10, EV_BUDDY = 11,
+        EV_RECS = 12, EV_SIMILAR = 13, EV_INTERESTS = 14, EV_PRIVROOM = 15;
 
     static final int VERSION = 160, MINOR = 1;
 
@@ -52,6 +53,12 @@ public final class Client implements Runnable {
 
     // people
     public final Vector buddies = new Vector(), ignored = new Vector(), banned = new Vector();
+    // interests (the server forgets them at logout, so we re-send them on login)
+    public final Vector likes = new Vector(), hates = new Vector();
+    // private rooms we own or belong to
+    public String[] privRooms = new String[0];
+    public int[] privCounts = new int[0];
+    public final Vector ownedRooms = new Vector();
     private int uploadedTotal;
 
     private final Listener ui;
@@ -314,9 +321,29 @@ public final class Client implements Runnable {
             for (int i = 0; i < n; i++) names[i] = r.str();
             int m = r.u32();
             int[] counts = new int[n];
-            for (int i = 0; i < m && i < n; i++) counts[i] = r.u32();
+            for (int i = 0; i < m; i++) { int v = r.u32(); if (i < n) counts[i] = v; }
             roomNames = names;
             roomCounts = counts;
+            // then private rooms we own, private rooms we're a member of (names + user counts)
+            Vector pn = new Vector(), pc = new Vector();
+            ownedRooms.removeAllElements();
+            for (int part = 0; part < 2 && r.left() >= 4; part++) {
+                int k = r.u32();
+                String[] nn = new String[k];
+                for (int i = 0; i < k; i++) nn[i] = r.str();
+                int kc = r.left() >= 4 ? r.u32() : 0;
+                for (int i = 0; i < kc; i++) {
+                    int v = r.u32();
+                    if (i < k && !pn.contains(nn[i])) { pn.addElement(nn[i]); pc.addElement(new Integer(v)); }
+                }
+                for (int i = kc; i < k; i++) if (!pn.contains(nn[i])) { pn.addElement(nn[i]); pc.addElement(new Integer(0)); }
+                if (part == 0) for (int i = 0; i < k; i++) ownedRooms.addElement(nn[i]);
+            }
+            String[] pa = new String[pn.size()];
+            int[] pca = new int[pn.size()];
+            for (int i = 0; i < pa.length; i++) { pa[i] = (String) pn.elementAt(i); pca[i] = ((Integer) pc.elementAt(i)).intValue(); }
+            privRooms = pa;
+            privCounts = pca;
             ui.event(EV_ROOMLIST, null, null);
             break;
         }
@@ -338,6 +365,58 @@ public final class Client implements Runnable {
         }
         case 104: // WishlistInterval
             startWishlist(r.u32());
+            break;
+        case 54: // Recommendations
+        case 56: { // GlobalRecommendations
+            ui.event(EV_RECS, code == 54 ? "rec" : "global", readScored(r));
+            break;
+        }
+        case 57: { // UserInterests
+            String u = r.str();
+            Vector l = new Vector(), h = new Vector();
+            int n = r.u32();
+            for (int i = 0; i < n; i++) l.addElement(r.str());
+            n = r.left() >= 4 ? r.u32() : 0;
+            for (int i = 0; i < n; i++) h.addElement(r.str());
+            ui.event(EV_INTERESTS, u, new Vector[] { l, h });
+            break;
+        }
+        case 110: { // SimilarUsers
+            Vector v = new Vector();
+            int n = r.u32();
+            for (int i = 0; i < n; i++) { v.addElement(r.str()); if (r.left() >= 4) r.u32(); }
+            ui.event(EV_SIMILAR, "similar", v);
+            break;
+        }
+        case 111: { // ItemRecommendations
+            String item = r.str();
+            ui.event(EV_RECS, "item:" + item, readScored(r));
+            break;
+        }
+        case 112: { // ItemSimilarUsers
+            String item = r.str();
+            Vector v = new Vector();
+            int n = r.u32();
+            for (int i = 0; i < n; i++) { v.addElement(r.str()); }
+            ui.event(EV_SIMILAR, "item:" + item, v);
+            break;
+        }
+        case 133: { // PrivateRoomUsers (members of a private room)
+            String room = r.str();
+            int n = r.u32();
+            Vector v = new Vector();
+            for (int i = 0; i < n; i++) v.addElement(r.str());
+            Room rm = (Room) rooms.get(room);
+            if (rm != null) rm.members = v;
+            break;
+        }
+        case 139: // PrivateRoomAdded
+            ui.event(EV_PRIVROOM, "You were added to private room " + r.str(), null);
+            requestRoomList();
+            break;
+        case 140: // PrivateRoomRemoved
+            ui.event(EV_PRIVROOM, "You were removed from private room " + r.str(), null);
+            requestRoomList();
             break;
         case 1001: { // CantConnectToPeer
             int tok = r.u32();
@@ -394,6 +473,9 @@ public final class Client implements Runnable {
         trySend(28, new Msg().u32(away ? 1 : 2));                  // SetStatus
         sendShareCounts();
         for (int i = 0; i < buddies.size(); i++) trySend(5, new Msg().str((String) buddies.elementAt(i))); // WatchUser
+        for (int i = 0; i < likes.size(); i++) trySend(51, new Msg().str((String) likes.elementAt(i)));   // AddThingILike
+        for (int i = 0; i < hates.size(); i++) trySend(117, new Msg().str((String) hates.elementAt(i)));  // AddThingIHate
+        trySend(141, new Msg().bool(true)); // accept private room invitations
         trySend(71, new Msg().bool(true));                          // HaveNoParent
         trySend(100, new Msg().bool(false));                        // AcceptChildren: no
         new Thread(new Runnable() {
@@ -622,6 +704,60 @@ public final class Client implements Runnable {
     private void statusChanged(UserInfo i, int before) {
         if (!buddies.contains(i.user) || before < 0 || before == i.status) return;
         if ((before == 0) != (i.status == 0)) ui.event(EV_BUDDY, i, null); // came online or went offline
+    }
+
+    // ================================================================ interests & recommendations
+
+    private static Vector readScored(Rd r) throws IOException {
+        Vector v = new Vector();
+        int n = r.u32();
+        for (int i = 0; i < n; i++) {
+            String item = r.str();
+            int score = r.left() >= 4 ? r.u32() : 0;
+            v.addElement(new Object[] { item, new Integer(score) });
+        }
+        return v;
+    }
+
+    public void like(String item, boolean on) {
+        if (on) { if (!likes.contains(item)) likes.addElement(item); hates.removeElement(item); trySend(51, new Msg().str(item)); }
+        else { likes.removeElement(item); trySend(52, new Msg().str(item)); }
+    }
+
+    public void hate(String item, boolean on) {
+        if (on) { if (!hates.contains(item)) hates.addElement(item); likes.removeElement(item); trySend(117, new Msg().str(item)); }
+        else { hates.removeElement(item); trySend(118, new Msg().str(item)); }
+    }
+
+    public void getRecommendations(boolean global) { trySend(global ? 56 : 54, new Msg()); }
+
+    public void getSimilarUsers() { trySend(110, new Msg()); }
+
+    public void getItemRecommendations(String item) { trySend(111, new Msg().str(item)); }
+
+    public void getItemSimilarUsers(String item) { trySend(112, new Msg().str(item)); }
+
+    public void getUserInterests(String user) { trySend(57, new Msg().str(user)); }
+
+    // ================================================================ private rooms
+
+    public boolean isPrivate(String room) {
+        for (int i = 0; i < privRooms.length; i++) if (privRooms[i].equals(room)) return true;
+        return false;
+    }
+
+    /** Creates the private room if it doesn't exist (you become its owner), else joins it. */
+    public void createPrivateRoom(String room) { trySend(14, new Msg().str(room).u32(1)); }
+
+    public void privateRoomAdd(String room, String user) { trySend(134, new Msg().str(room).str(user)); }
+
+    public void privateRoomRemove(String room, String user) { trySend(135, new Msg().str(room).str(user)); }
+
+    /** Leave a private room for good (owners disown it instead, which deletes it). */
+    public void privateRoomQuit(String room) {
+        trySend(ownedRooms.contains(room) ? 137 : 136, new Msg().str(room));
+        leaveRoom(room);
+        rooms.remove(room);
     }
 
     // ================================================================ chat & users

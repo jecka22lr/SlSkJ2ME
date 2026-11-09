@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0
+
+- Chat rooms and private messages use a new view that always opens at the newest message and stays
+  there as messages arrive (before, you had to scroll down after every reply). Up/Down or 2/8 scroll a
+  line, 1/7 a page, dragging works on touch screens; your own lines are blue
+- Interests (main menu): likes and dislikes, Recommended for me, Popular everywhere, Similar users.
+  Pick any item for who likes it, similar things, or to search for it. Users' menus have Their interests
+- Private rooms: Chat rooms > Private creates one; private rooms you own or belong to show in the list;
+  inside one: Invite, Members (owners can remove people) and Quit. You get a notice when someone adds you
+- My downloads > Retry restarts the automatic retries from zero
+- No longer a beta: the About screen just says the version
+
 ## Beta 0.5.0
 
 - Buddies (main menu): add people, see who's online, get a ticker + vibrate when a buddy comes
