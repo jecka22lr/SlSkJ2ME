@@ -117,6 +117,7 @@ final class PeerConn implements Runnable {
             out = sc.openOutputStream();
             if (mode == PIERCE) {
                 send(new Msg().u32(token).initFrame(0));
+                if ("P".equals(type) && !c.hasPending(user)) c.log("Connected to " + user);
             } else if (mode == DIRECT || mode == DISTRIB || mode == UPLOAD) {
                 send(new Msg().str(c.username).str(type).u32(0).initFrame(1));
             } else {
@@ -139,6 +140,8 @@ final class PeerConn implements Runnable {
             String m = e.getMessage() == null ? e.toString() : e.getMessage();
             if (mode == DIRECT || "F".equals(type)) c.log("Peer " + user + " (" + type + "): " + m);
             else if (mode == PIERCE && ready == 0) c.pierceFailed(user, token, m);
+            else if ("P".equals(type) && user != null && !"connection closed".equals(m) && !closed)
+                c.log("Peer " + user + " dropped: " + m);
             if ("F".equals(type) && upload == null) c.fileConnFailed(user, m);
             if (upload != null && ready == 1) c.uploadFailed(upload, m, true);
         } finally {

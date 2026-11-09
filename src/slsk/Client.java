@@ -271,6 +271,7 @@ public final class Client implements Runnable {
                 break;
             }
             if ("F".equals(type)) fileConnStep(u, "Uploader asked us to connect (F)");
+            else if (!hasPending(u)) log(u + " can't reach the phone, connecting to them at " + Util.ip(ip) + ":" + p);
             PeerConn.pierce(this, u, type, Util.ip(ip), p, tok).start();
             break;
         }
@@ -989,9 +990,13 @@ public final class Client implements Runnable {
 
     void onPeer(PeerConn p, int code, Rd r) throws IOException {
         switch (code) {
-        case 4: // GetShareFileList
-            p.send(new Msg().raw(shares.enabled ? shares.listResponse() : Util.zlibStore(new byte[12], 12)).frame(5));
+        case 4: { // GetShareFileList
+            byte[] list = shares.enabled ? shares.listResponse() : Util.zlibStore(new byte[12], 12);
+            log(p.user + " is browsing your shares");
+            p.send(new Msg().raw(list).frame(5));
+            log("Sent " + p.user + " your file list (" + (shares.enabled ? shares.files() : 0) + " files, " + list.length + " bytes)");
             break;
+        }
         case 5: { // SharedFileListResponse (we asked to browse them)
             try {
                 byte[] raw = Inflate.zlib(r.b, r.p, r.left(), maxBrowseBytes);
