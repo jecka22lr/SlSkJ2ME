@@ -64,6 +64,11 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private SocialUI social;
     private String[] settings;
     private final Command cUser = new Command("User", Command.ITEM, 3);
+    private final Command cFilter = new Command("Filter", Command.SCREEN, 2);
+    private static final String[] FILTERS = { "All files", "MP3 only", "FLAC only", "Lossy (mp3/ogg/m4a/opus...)",
+        "Lossless (flac/wav/ape/alac)", "Free slots only" };
+    private int filter;
+    private List filterL;
     private List folderL;
     private final Vector folderDirs = new Vector();
 
@@ -135,6 +140,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         resL.addCommand(cNew);
         resL.addCommand(cDl);
         resL.addCommand(cUser);
+        resL.addCommand(cFilter);
         resL.addCommand(cBack);
         resL.setCommandListener(this);
 
@@ -365,6 +371,9 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                 display.setCurrent(loginF);
                 break;
             }
+        } else if (d == filterL) {
+            if (c == List.SELECT_COMMAND) { filter = filterL.getSelectedIndex(); refilter(); }
+            display.setCurrent(resL);
         } else if (d == folderL) {
             if (c == cBack) { showMain(); return; }
             int i = folderL.getSelectedIndex();
@@ -384,7 +393,13 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (d == resL) {
             int i = resL.getSelectedIndex();
             Result r = i >= 0 && i < shown.size() ? (Result) shown.elementAt(i) : null;
-            if (c == cUser && r != null) {
+            if (c == cFilter) {
+                filterL = new List("Show", List.IMPLICIT, FILTERS, null);
+                filterL.setSelectedIndex(filter, true);
+                filterL.addCommand(cBack);
+                filterL.setCommandListener(this);
+                display.setCurrent(filterL);
+            } else if (c == cUser && r != null) {
                 social.showUser(r.user, resL);
             } else if (c == cGet && r != null) {
                 client.download(r);
@@ -509,20 +524,55 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         });
     }
 
+    private static boolean ext(String f, String list) {
+        int dot = f.lastIndexOf('.');
+        if (dot < 0) return false;
+        return list.indexOf("," + f.substring(dot + 1).toLowerCase() + ",") >= 0;
+    }
+
+    private boolean passes(Result r) {
+        switch (filter) {
+        case 1: return ext(r.file, ",mp3,");
+        case 2: return ext(r.file, ",flac,");
+        case 3: return ext(r.file, ",mp3,ogg,m4a,aac,opus,wma,mp2,");
+        case 4: return ext(r.file, ",flac,wav,ape,alac,aiff,aif,wv,");
+        case 5: return r.slot;
+        default: return true;
+        }
+    }
+
+    private void titleResults() {
+        int total = client == null ? shown.size() : client.results.size();
+        resL.setTitle((filter == 0 ? "" + total : shown.size() + "/" + total) + ": " + lastQuery);
+    }
+
+    private void addResult(Result r) {
+        if (!passes(r)) return;
+        // free-slot results go to the top, queued ones to the bottom
+        if (r.slot) {
+            int i = 0;
+            while (i < shown.size() && ((Result) shown.elementAt(i)).slot) i++;
+            shown.insertElementAt(r, i);
+            resL.insert(i, resLabel(r), null);
+        } else {
+            shown.addElement(r);
+            resL.append(resLabel(r), null);
+        }
+    }
+
+    private void refilter() {
+        resL.deleteAll();
+        shown.removeAllElements();
+        Vector v = client.results;
+        for (int i = 0; i < v.size(); i++) addResult((Result) v.elementAt(i));
+        titleResults();
+    }
+
     public void result(final Result r) {
         display.callSerially(new Runnable() {
             public void run() {
-                // free-slot results go to the top, queued ones to the bottom
-                if (r.slot) {
-                    int i = 0;
-                    while (i < shown.size() && ((Result) shown.elementAt(i)).slot) i++;
-                    shown.insertElementAt(r, i);
-                    resL.insert(i, resLabel(r), null);
-                } else {
-                    shown.addElement(r);
-                    resL.append(resLabel(r), null);
-                }
-                resL.setTitle(shown.size() + ": " + lastQuery);
+                addResult(r);
+                titleResults();
             }
         });
     }

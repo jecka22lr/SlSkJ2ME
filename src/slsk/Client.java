@@ -34,7 +34,11 @@ public final class Client implements Runnable {
     volatile String downloadDir;
     int maxSearchBytes = 192 * 1024;
     int maxBrowseBytes = 1536 * 1024;
-    int maxResults = 400;
+    int maxResults = 600;
+    /** Max results kept per user, so a few big lossless folders can't fill the whole list. */
+    int perUserCap = 25;
+    private final Hashtable perUser = new Hashtable();
+    private volatile boolean capPerUser = true;
     int maxPeers = 10;
 
     // profile & sharing settings (set by the UI before/after connect)
@@ -393,6 +397,8 @@ public final class Client implements Runnable {
     public void search(String query) {
         searchToken = rnd.nextInt() & 0x7fffffff;
         results.removeAllElements();
+        perUser.clear();
+        capPerUser = true;
         trySend(26, new Msg().u32(searchToken).str(query));
         log("Searching: " + query);
     }
@@ -401,6 +407,8 @@ public final class Client implements Runnable {
     public void userSearch(String user, String query) {
         searchToken = rnd.nextInt() & 0x7fffffff;
         results.removeAllElements();
+        perUser.clear();
+        capPerUser = false; // one user's files: no point capping
         trySend(42, new Msg().str(user).u32(searchToken).str(query));
         log("Searching " + user + "'s files: " + query);
     }
@@ -439,6 +447,13 @@ public final class Client implements Runnable {
         boolean slot = r.left() > 0 && r.bool();
         int speed = r.left() >= 4 ? r.u32() : 0;
         int queue = r.left() >= 4 ? r.u32() : 0;
+        int already = 0;
+        if (!wish && capPerUser) {
+            Integer prev = (Integer) perUser.get(user);
+            already = prev == null ? 0 : prev.intValue();
+            k = Math.max(0, Math.min(k, perUserCap - already));
+            perUser.put(user, new Integer(already + k));
+        }
         for (int i = 0; i < k; i++) {
             if (dest.size() >= cap) break;
             got[i].slot = slot; got[i].speed = speed; got[i].queue = queue;

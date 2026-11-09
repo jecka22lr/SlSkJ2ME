@@ -1,5 +1,12 @@
 # Changelog
 
+## Alpha 0.2.1
+
+- Search keeps at most 25 results per user, so a few users with big lossless folders
+  can't fill the list and crowd out everyone else (total cap raised to 600)
+- Results "Filter": all / MP3 only / FLAC only / lossy / lossless / free slots only.
+  Title shows shown/total when a filter is on.
+
 ## Alpha 0.2.0
 
 - Sharing: pick a folder on the phone, it gets scanned and reported to the server
