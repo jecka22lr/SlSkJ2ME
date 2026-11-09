@@ -344,10 +344,29 @@ final class SocialUI implements CommandListener {
         new FolderPicker(d, "Pick background image", new FolderPicker.Done() {
             public void picked(String url) {
                 if (url == null) { d.setCurrent(colorsF); return; }
+                final String prevImage = ChatColors.bgImage;
+                final int prevBg = gBg.getSelectedIndex();
                 ChatColors.bgImage = url;
                 ChatColors.forget();
-                gBg.setSelectedIndex(ChatColors.BG_IMAGE, true);
-                loadImageThen(colorsF);
+                new Thread(new Runnable() {
+                    public void run() {
+                        final String err = ChatColors.loadImage();
+                        d.callSerially(new Runnable() {
+                            public void run() {
+                                if (err != null) {
+                                    // keep what was there before instead of a picture we can't use
+                                    ChatColors.bgImage = prevImage;
+                                    ChatColors.forget();
+                                    gBg.setSelectedIndex(prevBg, true);
+                                    m.alert("Background image", err, colorsF);
+                                } else {
+                                    gBg.setSelectedIndex(ChatColors.BG_IMAGE, true);
+                                    d.setCurrent(colorsF);
+                                }
+                            }
+                        });
+                    }
+                }).start();
             }
         }, ",jpg,jpeg,png,gif,bmp,").show(start);
     }

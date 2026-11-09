@@ -17,6 +17,8 @@
   - Background: phone theme, a colour (sliders with preview, or type RRGGBB), or an image from the
     phone that fills (crops), stretches or tiles, with adjustable dimming toward darker/lighter/auto
   - Name colours are nudged lighter or darker when they'd be hard to read on the background
+  - Background pictures over about 2 megapixels are refused up front (read from the file header,
+    before decoding), since phones decode the whole picture into memory whatever the file size
 - Fixed: private rooms are joined with the private flag (from the room list and when rejoining after
   a reconnect), so the server doesn't refuse them or treat them as new public rooms
 - Fixed: a queued download whose name isn't UTF-8 could lose its original name bytes in a long session

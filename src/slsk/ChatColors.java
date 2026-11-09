@@ -128,6 +128,75 @@ final class ChatColors {
 
     // ---------------------------------------------------------------- background image
 
+    /** Biggest picture we'll decode: phones decode the whole thing at ~4 bytes per pixel. */
+    static final int MAX_PIXELS = 2000000;
+
+    /**
+     * Width and height from the file header (PNG, GIF, JPEG, BMP) without decoding it,
+     * or null if it can't tell. Reads only the header bytes.
+     */
+    static int[] imageSize(InputStream in) throws java.io.IOException {
+        int b0 = in.read(), b1 = in.read();
+        if (b0 < 0 || b1 < 0) return null;
+        if (b0 == 0x89 && b1 == 'P') { // PNG: IHDR width/height at bytes 16..23, big-endian
+            skip(in, 14);
+            return new int[] { be32(in), be32(in) };
+        }
+        if (b0 == 'G' && b1 == 'I') { // GIF: logical screen size at bytes 6..9, little-endian
+            skip(in, 4);
+            int w = in.read() | in.read() << 8, h = in.read() | in.read() << 8;
+            return new int[] { w, h };
+        }
+        if (b0 == 'B' && b1 == 'M') { // BMP: width/height at 18..25, little-endian (height may be negative)
+            skip(in, 16);
+            int w = le32(in), h = le32(in);
+            return new int[] { Math.abs(w), Math.abs(h) };
+        }
+        if (b0 == 0xff && b1 == 0xd8) { // JPEG: walk the segments to the frame header (SOFn)
+            while (true) {
+                int m = in.read();
+                while (m == 0xff) m = in.read();
+                if (m < 0) return null;
+                if (m == 0xd8 || m == 0x01 || (m >= 0xd0 && m <= 0xd7)) continue; // no length
+                int len = in.read() << 8 | in.read();
+                if (len < 2) return null;
+                boolean sof = m >= 0xc0 && m <= 0xcf && m != 0xc4 && m != 0xc8 && m != 0xcc;
+                if (sof) {
+                    in.read(); // precision
+                    int h = in.read() << 8 | in.read();
+                    int w = in.read() << 8 | in.read();
+                    return new int[] { w, h };
+                }
+                if (m == 0xd9 || m == 0xda) return null; // end / scan data before any frame header
+                skip(in, len - 2);
+            }
+        }
+        return null;
+    }
+
+    private static void skip(InputStream in, long n) throws java.io.IOException {
+        while (n > 0) {
+            long k = in.skip(n);
+            if (k <= 0) { if (in.read() < 0) throw new java.io.IOException("short file"); k = 1; }
+            n -= k;
+        }
+    }
+
+    private static int be32(InputStream in) throws java.io.IOException {
+        return in.read() << 24 | in.read() << 16 | in.read() << 8 | in.read();
+    }
+
+    private static int le32(InputStream in) throws java.io.IOException {
+        return in.read() | in.read() << 8 | in.read() << 16 | in.read() << 24;
+    }
+
+    /** null if w x h is fine to use, else the message to show. */
+    static String tooBig(int w, int h) {
+        if ((long) w * h <= MAX_PIXELS) return null;
+        return "That picture is " + w + "x" + h + ". Pick one under about 2 megapixels (for example 1600x1200), "
+            + "ideally your screen size, so the phone doesn't run out of memory.";
+    }
+
     /** Decode the picked image. Call off the UI thread. Returns null if ok, else why not. */
     static String loadImage() {
         if (bgImage == null || bgImage.length() == 0) return "No image picked";
@@ -137,8 +206,26 @@ final class ChatColors {
         InputStream in = null;
         try {
             fc = (FileConnection) Connector.open(bgImage, Connector.READ);
+            // check the size from the header first: decoding a big photo can take the whole heap
+            in = fc.openInputStream();
+            int[] wh = null;
+            try { wh = imageSize(in); } catch (Throwable e) {}
+            in.close();
+            in = null;
+            if (wh != null && tooBig(wh[0], wh[1]) != null) {
+                imageError = tooBig(wh[0], wh[1]);
+                fc.close();
+                return imageError;
+            }
             in = fc.openInputStream();
             source = Image.createImage(in);
+            if (tooBig(source.getWidth(), source.getHeight()) != null) { // header said nothing; check now
+                imageError = tooBig(source.getWidth(), source.getHeight());
+                source = null;
+                in.close();
+                fc.close();
+                return imageError;
+            }
             sourceFor = bgImage;
         } catch (OutOfMemoryError e) {
             imageError = "Image too big for the phone's memory. Try a smaller one (around the screen size).";
