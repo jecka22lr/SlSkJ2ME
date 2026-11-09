@@ -5,7 +5,6 @@
 - Fixed: no preview showed in Chat look or the colour picker on the C6-00 (the phone hides image
   items in forms). Both now have a live preview drawn by the app: a mini chat with your settings at
   the top of Chat look, and a sample in the colour picker that follows the sliders
-- License changed from MIT to GPL-3.0-or-later (1.0 and earlier stay MIT)
 
 ## 1.0.0
 
@@ -34,6 +33,7 @@
   and then fail with "File not shared"
 - My downloads > Retry restarts the automatic retries from zero
 - No longer a beta: the About screen just says the version
+- License changed from MIT to GPL-3.0-or-later (Beta 0.4.2 and earlier stay MIT)
 
 ## Beta 0.5.0
 
