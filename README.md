@@ -59,6 +59,11 @@ MD5 and the zlib decoder against the JDK, the writable-folder fallback, and a fu
 login, search, download and resume against `test/mock.py` (a mock server plus one peer), and
 `test/mock2.py` for rooms, PMs, profiles, browsing both ways, wishlist, distributed search and uploads.
 
+## Emulator screenshots
+
+`test/emu/` builds MicroEmulator from source and runs the real jar on a virtual display against a mock
+server, so screens can be checked without a phone. See `test/emu/README.md`.
+
 ## Layout
 
 | File | What it does |

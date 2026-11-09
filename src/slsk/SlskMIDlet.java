@@ -46,15 +46,15 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private final Command cLogin = new Command("Log in", Command.OK, 1);
     private final Command cBack = new Command("Back", Command.BACK, 2);
     private final Command cGo = new Command("Search", Command.OK, 1);
-    private final Command cGet = new Command("Download / open", Command.ITEM, 1);
+    private final Command cGet = new Command("Open", "Download / open", Command.ITEM, 1);
     private final Command cInfo = new Command("Details", Command.ITEM, 2);
     private final Command cNew = new Command("New search", Command.SCREEN, 3);
     private final Command cRetry = new Command("Retry", Command.ITEM, 2);
-    private final Command cPlace = new Command("Queue place", Command.ITEM, 3);
+    private final Command cPlace = new Command("Place", "Queue place", Command.ITEM, 3);
     private final Command cRemove = new Command("Remove", Command.ITEM, 4);
-    private final Command cClear = new Command("Clear finished", Command.SCREEN, 5);
+    private final Command cClear = new Command("Clear", "Clear finished", Command.SCREEN, 5);
     private final Command cCancel = new Command("Cancel", Command.CANCEL, 1);
-    private final Command cDl = new Command("My downloads", Command.SCREEN, 4);
+    private final Command cDl = new Command("Downloads", "My downloads", Command.SCREEN, 4);
     private final Command cAbout = new Command("About", Command.HELP, 8);
     private Form aboutF;
     private Displayable aboutBack;
@@ -65,10 +65,10 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private SocialUI social;
     private String[] settings;
     private final Command cUser = new Command("User", Command.ITEM, 3);
-    private final Command cExitNow = new Command("Exit anyway", Command.OK, 1);
+    private final Command cExitNow = new Command("Exit", "Exit anyway", Command.OK, 1);
     private final Command cStay = new Command("Stay", Command.CANCEL, 2);
-    private final Command cBrowse = new Command("Browse folders", Command.SCREEN, 2);
-    private final Command cDirYes = new Command("Download all", Command.OK, 1);
+    private final Command cBrowse = new Command("Browse", "Browse folders", Command.SCREEN, 2);
+    private final Command cDirYes = new Command("Get all", "Download all", Command.OK, 1);
     private final Command cDirNo = new Command("Cancel", Command.CANCEL, 2);
     private final Command cFilter = new Command("Filter", Command.SCREEN, 2);
     private static final String[] FILTERS = { "All files", "MP3 only", "FLAC only", "Lossy (mp3/ogg/m4a/opus...)",
@@ -78,8 +78,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private static final int PAGE = 80;
     private int page;
     private volatile boolean resDirty;
-    private final Command cNext = new Command("Next page", Command.SCREEN, 1);
-    private final Command cPrev = new Command("Previous page", Command.SCREEN, 2);
+    private final Command cNext = new Command("Next", "Next page", Command.SCREEN, 1);
+    private final Command cPrev = new Command("Prev", "Previous page", Command.SCREEN, 2);
     private List folderL;
     private final Vector folderDirs = new Vector();
 
@@ -164,8 +164,6 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         resL.addCommand(cDl);
         resL.addCommand(cUser);
         resL.addCommand(cFilter);
-        resL.addCommand(cNext);
-        resL.addCommand(cPrev);
         resL.addCommand(cBack);
         resL.setCommandListener(this);
 
@@ -801,7 +799,18 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         }
     }
 
+    private boolean pageCmds;
+
+    private void updatePageCommands() {
+        boolean want = pages() > 1;
+        if (want == pageCmds) return;
+        pageCmds = want;
+        if (want) { resL.addCommand(cNext); resL.addCommand(cPrev); }
+        else { resL.removeCommand(cNext); resL.removeCommand(cPrev); }
+    }
+
     private void titleResults() {
+        updatePageCommands();
         int total = groups.total();
         int shownFiles = 0;
         if (filter != 0) for (int k = 0; k < rows.size(); k++) if (rows.elementAt(k) instanceof Result) shownFiles++;

@@ -31,20 +31,20 @@ final class SocialUI implements CommandListener {
     private final Command cSay = new Command("Write", Command.SCREEN, 1);
     private final Command cUsers = new Command("Users", Command.SCREEN, 2);
     private final Command cLeave = new Command("Leave room", Command.SCREEN, 3);
-    private final Command cJoinName = new Command("Join by name", Command.SCREEN, 2);
+    private final Command cJoinName = new Command("Join", "Join by name", Command.SCREEN, 2);
     private final Command cRefresh = new Command("Refresh", Command.SCREEN, 3);
-    private final Command cNewPm = new Command("New message", Command.SCREEN, 2);
+    private final Command cNewPm = new Command("New", "New message", Command.SCREEN, 2);
     private final Command cProfile = new Command("User", Command.SCREEN, 2);
-    private final Command cGet = new Command("Download file", Command.ITEM, 1);
-    private final Command cGetAll = new Command("Download whole folder", Command.SCREEN, 2);
+    private final Command cGet = new Command("Get", "Download file", Command.ITEM, 1);
+    private final Command cGetAll = new Command("Get all", "Download whole folder", Command.SCREEN, 2);
     private final Command cInfo = new Command("Details", Command.ITEM, 3);
     private final Command cAdd = new Command("Add", Command.SCREEN, 2);
     private final Command cRemove = new Command("Remove", Command.ITEM, 3);
     private final Command cNow = new Command("Search now", Command.ITEM, 4);
     private final Command cSave = new Command("Save", Command.OK, 1);
-    private final Command cRescan = new Command("Rescan shares", Command.SCREEN, 2);
-    private final Command cClear = new Command("Clear finished", Command.SCREEN, 4);
-    private final Command cPick = new Command("Pick shared folder", Command.SCREEN, 2);
+    private final Command cRescan = new Command("Rescan", "Rescan shares", Command.SCREEN, 2);
+    private final Command cClear = new Command("Clear", "Clear finished", Command.SCREEN, 4);
+    private final Command cPick = new Command("Pick folder", "Pick shared folder", Command.SCREEN, 2);
 
     // rooms
     private List roomsL, usersL;

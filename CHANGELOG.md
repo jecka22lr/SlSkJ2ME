@@ -1,5 +1,13 @@
 # Changelog
 
+## Alpha 0.4.1
+
+- Commands have short soft-key labels (Get, Open, Downloads, Next...), so they no longer get
+  cut off on narrow screens; the menu still shows the full names
+- Next/Previous page only appear when there's more than one page
+- Emulator screenshot testing: `test/emu/` builds MicroEmulator from source and drives the real
+  jar against a mock server on a virtual display
+
 ## Alpha 0.4.0
 
 - Search results regrouped like desktop clients: user (free slot / queue, speed),
