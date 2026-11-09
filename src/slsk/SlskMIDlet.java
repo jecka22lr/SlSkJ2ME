@@ -66,6 +66,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private final Command cUser = new Command("User", Command.ITEM, 3);
     private final Command cExitNow = new Command("Exit anyway", Command.OK, 1);
     private final Command cStay = new Command("Stay", Command.CANCEL, 2);
+    private final Command cBrowse = new Command("Browse folders", Command.SCREEN, 2);
     private final Command cFilter = new Command("Filter", Command.SCREEN, 2);
     private static final String[] FILTERS = { "All files", "MP3 only", "FLAC only", "Lossy (mp3/ogg/m4a/opus...)",
         "Lossless (flac/wav/ape/alac)", "Free slots only" };
@@ -362,6 +363,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     /** Test every candidate folder and let the user pick a writable one. */
     private void showFolders() {
         folderL = new List("Testing folders...", List.IMPLICIT);
+        folderL.addCommand(cBrowse);
         folderL.addCommand(cBack);
         folderL.setCommandListener(this);
         folderDirs.removeAllElements();
@@ -450,6 +452,26 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             display.setCurrent(resL);
         } else if (d == folderL) {
             if (c == cBack) { showMain(); return; }
+            if (c == cBrowse) {
+                new FolderPicker(display, "Pick save location", new FolderPicker.Done() {
+                    public void picked(final String url) {
+                        if (url == null) { display.setCurrent(folderL); return; }
+                        new Thread(new Runnable() {
+                            public void run() {
+                                final String err = Store.probe(url);
+                                display.callSerially(new Runnable() {
+                                    public void run() {
+                                        if (err != null) { alert("Save location", err + " Pick another folder.", folderL); return; }
+                                        useFolder(url);
+                                        alert("Save location", "Downloads will be saved to " + Store.friendly(url), mainL);
+                                    }
+                                });
+                            }
+                        }).start();
+                    }
+                }).show(fDir.getString().trim());
+                return;
+            }
             int i = folderL.getSelectedIndex();
             String dir = i >= 0 && i < folderDirs.size() ? (String) folderDirs.elementAt(i) : null;
             if (dir == null) { alert("Folder", "The phone won't let the app write there. Pick one marked OK.", folderL); return; }

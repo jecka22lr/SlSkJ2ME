@@ -44,6 +44,7 @@ final class SocialUI implements CommandListener {
     private final Command cSave = new Command("Save", Command.OK, 1);
     private final Command cRescan = new Command("Rescan shares", Command.SCREEN, 2);
     private final Command cClear = new Command("Clear finished", Command.SCREEN, 4);
+    private final Command cPick = new Command("Pick shared folder", Command.SCREEN, 2);
 
     // rooms
     private List roomsL, usersL;
@@ -357,6 +358,7 @@ final class SocialUI implements CommandListener {
         myF.append(fSlots);
         myF.append(shareInfo);
         myF.addCommand(cSave);
+        myF.addCommand(cPick);
         myF.addCommand(cRescan);
         myF.addCommand(cBack);
         myF.setCommandListener(this);
@@ -615,6 +617,13 @@ final class SocialUI implements CommandListener {
             else if (c == cRemove && q != null) { cl.wishlist.removeElement(q); saveWishlist(); showWishlist(); }
             else if (c == cNow && q != null) { cl.wishSearch(q); m.alert("Wishlist", "Searching for " + q, wishL); }
             else if (c == List.SELECT_COMMAND && i == 0) showWishResults();
+        } else if (s == myF && c == cPick) {
+            new FolderPicker(d, "Pick folder to share", new FolderPicker.Done() {
+                public void picked(String url) {
+                    if (url != null) fShare.setString(url);
+                    d.setCurrent(myF);
+                }
+            }).show(fShare.getString().trim().length() > 0 ? fShare.getString().trim() : null);
         } else if (s == myF) {
             if (c == cBack) m.showMain();
             else if (c == cSave) saveMyProfile(false);

@@ -1,5 +1,11 @@
 # Changelog
 
+## Alpha 0.3.1
+
+- Folder picker: browse drives and folders, go up, create a new folder.
+  Used by **Profile & sharing > Pick shared folder** and **Save location > Browse folders**
+  (save locations are write-tested before they're accepted)
+
 ## Alpha 0.3.0
 
 - Auto-reconnect: a dropped connection retries by itself (5 s, doubling up to 2 min),
