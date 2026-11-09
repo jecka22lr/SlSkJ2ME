@@ -41,5 +41,7 @@ final class Rd {
         return s;
     }
 
+    void skipStr() throws IOException { int len = u32(); skip(len); }
+
     void skip(int k) throws IOException { need(k); p += k; }
 }

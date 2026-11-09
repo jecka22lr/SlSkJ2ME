@@ -1,9 +1,18 @@
-Second alpha of SlskME, a Soulseek client for J2ME phones (CLDC 1.1 / MIDP 2.0 / JSR-75).
+The big one: SlskME is now a proper Soulseek client instead of a download tool.
 
-**New:** an About screen, reachable from the main menu or the login screen's menu. It shows the version, author, source link, license, protocol credits, your phone's platform string, free memory and the current download folder (handy for bug reports).
+**New in Alpha 0.2.0**
+- Sharing and uploads: pick a folder in **Profile & sharing**, and people can find, browse and download your files
+- Search network: your shared files show up in other people's searches
+- Chat rooms: browse the room list, join, chat, see who's there
+- Private messages, with a vibrate and ticker when one arrives
+- User menu from results, rooms or messages (or **Find user**): profile with picture, browse their files, search their files, message them
+- Browse anyone's shares and download single files or whole folders
+- Wishlist: saved searches that keep running in the background
 
-**Install:** copy `SlskME.jar` to the phone and open it (or use the `.jad` for OTA). The zip has both. Uninstall the previous version first.
+**Install:** copy `SlskME.jar` to the phone and open it (or use the `.jad` for OTA). Uninstall the previous version first.
 
-**Not yet:** sharing/uploads, chat rooms, private messages, browsing users, wishlist. Since it shares nothing, some users will deny downloads.
-
-Unsigned build: expect the phone to ask for network and file access. If downloads fail with a file permission error, open **Download folder** in the menu and pick one marked OK.
+**Notes**
+- Uploads go out to people with an open port. On mobile data your phone can't accept incoming connections, so downloaders who are also firewalled can't get files from you (same limit every Soulseek client has).
+- Big share lists may not fit in phone memory when browsing. If so, use "Search their files" instead.
+- Sharing scans up to 1500 files.
+- Unsigned build: expect permission prompts. If file access is refused, use **Download folder** in the menu.

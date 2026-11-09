@@ -90,6 +90,47 @@ final class Util {
         return sb.toString();
     }
 
+    /** zlib stream using stored (uncompressed) blocks: valid for any inflater, no deflate code needed. */
+    static byte[] zlibStore(byte[] d, int len) {
+        int blocks = Math.max(1, (len + 65534) / 65535);
+        byte[] out = new byte[2 + len + blocks * 5 + 4];
+        int o = 0;
+        out[o++] = 0x78; out[o++] = 0x01;
+        int p = 0;
+        for (int b = 0; b < blocks; b++) {
+            int n = Math.min(65535, len - p);
+            out[o++] = (byte) (b == blocks - 1 ? 1 : 0);
+            out[o++] = (byte) n; out[o++] = (byte) (n >> 8);
+            out[o++] = (byte) ~n; out[o++] = (byte) (~n >> 8);
+            System.arraycopy(d, p, out, o, n);
+            o += n; p += n;
+        }
+        long a = 1, bb = 0;
+        p = 0;
+        while (p < len) {
+            int end = Math.min(len, p + 5552);
+            for (; p < end; p++) { a += d[p] & 0xff; bb += a; }
+            a %= 65521; bb %= 65521;
+        }
+        out[o++] = (byte) (bb >> 8); out[o++] = (byte) bb; out[o++] = (byte) (a >> 8); out[o++] = (byte) a;
+        return out;
+    }
+
+    static String decodeUrl(String s) {
+        if (s.indexOf('%') < 0) return s;
+        byte[] b = new byte[s.length()];
+        int n = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '%' && i + 2 < s.length()) {
+                try { b[n++] = (byte) Integer.parseInt(s.substring(i + 1, i + 3), 16); i += 2; continue; }
+                catch (Exception e) {}
+            }
+            b[n++] = (byte) c;
+        }
+        return decode(b, 0, n);
+    }
+
     static String size(long n) {
         if (n < 1024) return n + " B";
         if (n < 1024 * 1024) return (n / 1024) + " KB";

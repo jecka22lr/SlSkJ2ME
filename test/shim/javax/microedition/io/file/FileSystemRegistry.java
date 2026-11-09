@@ -15,6 +15,10 @@ public class FileSystemRegistry {
         case "mkdir": f.mkdirs(); return null;
         case "create": f.createNewFile(); return null;
         case "fileSize": return f.length();
+        case "isDirectory": return f.isDirectory();
+        case "list": { Vector v = new Vector(); File[] fs = f.listFiles(); if (fs != null) { Arrays.sort(fs); for (File x : fs) v.add(x.getName() + (x.isDirectory() ? "/" : "")); } return v.elements(); }
+        case "openInputStream": return new FileInputStream(f);
+        case "delete": f.delete(); return null;
         case "truncate": new RandomAccessFile(f, "rw").setLength((Long) a[0]); return null;
         case "openOutputStream":
           if (a == null) return new FileOutputStream(f);

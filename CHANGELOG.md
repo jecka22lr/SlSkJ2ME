@@ -1,5 +1,19 @@
 # Changelog
 
+## Alpha 0.2.0
+
+- Sharing: pick a folder on the phone, it gets scanned and reported to the server
+- Uploads: people can queue and download your shared files (upload slots configurable)
+- Joins the distributed search network, so other users' searches find your files
+- Others can browse your shares and read your profile
+- Chat rooms: room list (biggest first), join by name, read/write, user list, leave
+- Private messages: conversations list, new message, unread counts, vibrate + ticker on arrival
+- User menu (from results, rooms, messages or Find user): profile with picture, browse files,
+  search their files, send message
+- Browse other users' shares by folder, download single files or whole folders
+- Wishlist: saved searches run on the server's schedule, hits get their own results list
+- Profile & sharing screen: profile text, online/away, shared folder, upload slots
+
 ## Alpha 0.1.4
 
 - About screen (main menu, or the login screen's menu): version, author, source link, license,

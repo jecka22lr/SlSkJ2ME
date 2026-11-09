@@ -6,6 +6,7 @@ public class E2E implements Client.Listener {
   public void result(Result r) { res++; System.out.println("UI result " + r.label()); }
   public void transferChanged(Transfer t) { }
   public void log(String s) { System.out.println("UI log " + s); }
+  public void event(int t, Object a, Object b) {}
   public static void main(String[] a) throws Exception {
     E2E ui = new E2E();
     Client c = new Client(ui, "jecka", "hunter2", "127.0.0.1", 22420, 0, Store.defaultDir());

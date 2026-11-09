@@ -26,6 +26,15 @@ final class Msg {
 
     Msg bool(boolean v) { return u8(v ? 1 : 0); }
 
+    int length() { return n; }
+
+    /** zlib-wrap the payload (for share lists and search results). */
+    Msg zlib() {
+        byte[] z = Util.zlibStore(b, n);
+        Msg m = new Msg();
+        return m.raw(z);
+    }
+
     Msg raw(byte[] d) { ensure(d.length); System.arraycopy(d, 0, b, n, d.length); n += d.length; return this; }
 
     Msg str(String s) { byte[] d = Util.utf8(s); u32(d.length); return raw(d); }

@@ -19,8 +19,16 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - Each download keeps a step trace (open Details) so failures say exactly where they broke
 - About screen with version, source link, phone platform and free memory (useful for bug reports)
 
-Not implemented yet: sharing/uploads, chat rooms, private messages, browsing users, wishlist.
-You will be blocked by users who do not like downloaders without shares for now. 
+- Sharing and uploads: share a folder from the phone, people can browse, search and download it
+- Joins the distributed search network so your shares turn up in other people's searches
+- Chat rooms: room list, join, chat, user list
+- Private messages with vibrate/ticker notifications
+- User profiles (with picture), browse anyone's files, search one user's files, download whole folders
+- Wishlist: saved searches that run on the server's schedule
+- Profile text and online/away status
+
+Uploads only reach people with an open port when you're on mobile data (you can't accept incoming
+connections behind carrier NAT). Big share lists may not fit in phone memory when browsing.
 
 ## Install
 
@@ -47,13 +55,16 @@ adds the StackMap attributes CLDC needs, replacing the old WTK preverifier.
 
 Runs on a desktop JVM with a small shim standing in for the phone's sockets and filesystem:
 MD5 and the zlib decoder against the JDK, the writable-folder fallback, and a full
-login, search, download and resume against `test/mock.py` (a mock server plus one peer).
+login, search, download and resume against `test/mock.py` (a mock server plus one peer), and
+`test/mock2.py` for rooms, PMs, profiles, browsing both ways, wishlist, distributed search and uploads.
 
 ## Layout
 
 | File | What it does |
 | --- | --- |
-| `Client.java` | Protocol core: server connection, search, peers, transfers. No UI code. |
+| `Client.java` | Protocol core: server connection, search, peers, transfers, chat, uploads. No UI code. |
+| `Shares.java` | Shared file index: scan, search matching, share list / search responses |
+| `SocialUI.java` | Rooms, messages, users, browse, wishlist, profile & sharing, uploads screens |
 | `PeerConn.java` | Peer connections: PierceFirewall / PeerInit, messages ("P") and file data ("F") |
 | `Inflate.java` | zlib decoder (search results are compressed, CLDC has no java.util.zip) |
 | `MD5.java` | Login hash |

@@ -19,6 +19,7 @@ import javax.microedition.lcdui.List;
 import javax.microedition.lcdui.StringItem;
 import javax.microedition.lcdui.TextBox;
 import javax.microedition.lcdui.TextField;
+import javax.microedition.lcdui.Ticker;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.rms.RecordStore;
 
@@ -58,7 +59,11 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private Displayable aboutBack;
     private Form connF;
 
-    private static final String[] MENU = { "Search", "Results", "Downloads", "Log", "Download folder", "About", "Log out" };
+    private static final String[] MENU = { "Search", "Results", "Downloads", "Uploads", "Chat rooms", "Messages",
+        "Find user", "Wishlist", "Profile & sharing", "Log", "Download folder", "About", "Log out" };
+    private SocialUI social;
+    private String[] settings;
+    private final Command cUser = new Command("User", Command.ITEM, 3);
     private List folderL;
     private final Vector folderDirs = new Vector();
 
@@ -66,6 +71,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         if (started) return;
         started = true;
         display = Display.getDisplay(this);
+        social = new SocialUI(this, display);
         buildLogin();
         logF = new Form("Log");
         logF.addCommand(cBack);
@@ -84,6 +90,11 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
 
     private void buildLogin() {
         String[] s = loadSettings();
+        settings = s;
+        social.description = s[6];
+        social.shareDir = s[7];
+        social.sharing = "1".equals(s[8]);
+        social.slots = s[9];
         loginF = new Form("SlskME");
         fUser = new TextField("Username", s[0], 30, TextField.ANY | TextField.NON_PREDICTIVE);
         fPass = new TextField("Password", s[1], 30, TextField.PASSWORD);
@@ -123,6 +134,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         resL.addCommand(cInfo);
         resL.addCommand(cNew);
         resL.addCommand(cDl);
+        resL.addCommand(cUser);
         resL.addCommand(cBack);
         resL.setCommandListener(this);
 
@@ -149,14 +161,18 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         for (int i = 0; i < client.transfers.size(); i++)
             if (!((Transfer) client.transfers.elementAt(i)).finished()) active++;
         mainL.set(2, "Downloads (" + active + "/" + client.transfers.size() + ")", null);
+        mainL.set(3, "Uploads (" + social.activeUploads() + ")", null);
+        int pm = social.unreadPMs();
+        mainL.set(5, pm > 0 ? "Messages (" + pm + " new)" : "Messages", null);
+        mainL.set(7, "Wishlist (" + client.wishResults.size() + " found)", null);
     }
 
-    private void showMain() {
+    void showMain() {
         refreshMain();
         display.setCurrent(mainL);
     }
 
-    private void showInfo(String title, String text, Displayable back) {
+    void showInfo(String title, String text, Displayable back) {
         infoF.deleteAll();
         infoF.setTitle(title);
         infoF.append(new StringItem(null, text));
@@ -164,7 +180,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         display.setCurrent(infoF);
     }
 
-    private void alert(String title, String msg, Displayable next) {
+    void alert(String title, String msg, Displayable next) {
         Alert a = new Alert(title, msg, null, AlertType.INFO);
         a.setTimeout(Alert.FOREVER);
         display.setCurrent(a, next);
@@ -190,6 +206,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             }
         }
     }
+
+    String resultLabel(Result r) { return resLabel(r); }
 
     private String resLabel(Result r) {
         int st = client == null ? -1 : client.stateOf(r.user, r.file);
@@ -230,13 +248,47 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         display.setCurrent(aboutF);
     }
 
-    private void useFolder(String d) {
-        fDir.setString(d);
-        if (client != null) client.setDownloadDir(d);
+    Client client() { return client; }
+
+    Displayable main() { return mainL; }
+
+    void toLogin() { display.setCurrent(loginF); }
+
+    void showResults(String title) {
+        resL.deleteAll();
+        shown.removeAllElements();
+        lastQuery = title;
+        resL.setTitle(title);
+        display.setCurrent(resL);
+    }
+
+    void notifyUser(String s) {
+        try { display.vibrate(300); } catch (Throwable e) {}
+        Ticker t = SocialUI.ticker(s);
+        if (mainL != null) mainL.setTicker(t);
+        Displayable cur = display.getCurrent();
+        if (cur != null && !(cur instanceof Alert)) cur.setTicker(t);
+        log(s);
+    }
+
+    void clearTicker() {
+        if (mainL != null) mainL.setTicker(null);
+        Displayable cur = display.getCurrent();
+        if (cur != null) cur.setTicker(null);
+    }
+
+    void saveAll() {
         boolean[] rem = new boolean[1];
         fRemember.getSelectedFlags(rem);
         saveSettings(new String[] { fUser.getString().trim(), rem[0] ? fPass.getString() : "",
-            fHost.getString().trim(), fPort.getString(), fListen.getString(), d });
+            fHost.getString().trim(), fPort.getString().trim(), fListen.getString().trim(), fDir.getString().trim(),
+            social.description, social.shareDir, social.sharing ? "1" : "0", social.slots });
+    }
+
+    private void useFolder(String d) {
+        fDir.setString(d);
+        if (client != null) client.setDownloadDir(d);
+        saveAll();
         log("Download folder set: " + d);
     }
 
@@ -297,12 +349,19 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             case 0: display.setCurrent(searchTB); break;
             case 1: refreshResultMarks(); display.setCurrent(resL); break;
             case 2: dlBack = mainL; showDownloads(); break;
-            case 3: display.setCurrent(logF); break;
-            case 4: showFolders(); break;
-            case 5: showAbout(mainL); break;
-            case 6:
+            case 3: social.showUploads(); break;
+            case 4: social.showRooms(); break;
+            case 5: social.showConvos(); break;
+            case 6: social.findUser(); break;
+            case 7: social.showWishlist(); break;
+            case 8: social.showMyProfile(); break;
+            case 9: display.setCurrent(logF); break;
+            case 10: showFolders(); break;
+            case 11: showAbout(mainL); break;
+            case 12:
                 client.logout();
                 client = null;
+                social.reset();
                 display.setCurrent(loginF);
                 break;
             }
@@ -325,7 +384,9 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (d == resL) {
             int i = resL.getSelectedIndex();
             Result r = i >= 0 && i < shown.size() ? (Result) shown.elementAt(i) : null;
-            if (c == cGet && r != null) {
+            if (c == cUser && r != null) {
+                social.showUser(r.user, resL);
+            } else if (c == cGet && r != null) {
                 client.download(r);
                 resL.set(i, resLabel(r), null);
                 Alert a = new Alert("Queued", Util.baseName(r.file), null, AlertType.CONFIRMATION);
@@ -371,11 +432,14 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         int port = parse(fPort.getString(), 2242), lp = parse(fListen.getString(), 0);
         String dir = fDir.getString().trim();
         if (!dir.endsWith("/")) dir += "/";
-        boolean[] rem = new boolean[1];
-        fRemember.getSelectedFlags(rem);
-        saveSettings(new String[] { u, rem[0] ? p : "", fHost.getString().trim(), "" + port, "" + lp, dir });
+        fDir.setString(dir);
+        saveAll();
         buildMain();
+        social.reset();
         client = new Client(this, u, p, fHost.getString().trim(), port, lp, dir);
+        client.description = social.description;
+        try { client.uploadSlots = Math.max(1, Math.min(4, Integer.parseInt(social.slots))); } catch (Exception e) {}
+        social.loadWishlist(client.wishlist);
         connF = new Form("Connecting");
         connF.append("Logging in to " + fHost.getString() + "...");
         connF.addCommand(cCancel);
@@ -389,6 +453,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                     display.callSerially(new Runnable() {
                         public void run() {
                             if (client != null && display.getCurrent() == dlL) refreshDownloads();
+                            if (client != null && social.showingUploads()) social.refreshUploads();
                         }
                     });
                 }
@@ -408,6 +473,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                 if (ok) {
                     log("Logged in. " + msg);
                     showMain();
+                    social.startScan();
                     final String dir = fDir.getString().trim();
                     new Thread(new Runnable() {
                         public void run() {
@@ -461,6 +527,12 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         });
     }
 
+    public void event(final int type, final Object a, final Object b) {
+        display.callSerially(new Runnable() {
+            public void run() { if (client != null) social.onEvent(type, a, b); }
+        });
+    }
+
     public void transferChanged(Transfer t) {
         // the 1 s timer repaints the downloads list; nothing to do here
     }
@@ -477,7 +549,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     // ------------------------------------------------------------ settings (RMS)
 
     private String[] loadSettings() {
-        String[] s = { "", "", "server.slsknet.org", "2242", "0", null };
+        String[] s = { "", "", "server.slsknet.org", "2242", "0", null, "", "", "0", "1" };
         try {
             RecordStore rs = RecordStore.openRecordStore("slskme", true);
             if (rs.getNumRecords() > 0) {
