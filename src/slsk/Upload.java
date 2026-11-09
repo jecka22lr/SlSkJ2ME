@@ -12,6 +12,13 @@ public final class Upload {
     public volatile long done;
     public volatile String info = "";
     volatile long since = System.currentTimeMillis();
+    private final StringBuffer trace = new StringBuffer();
+
+    /** Step-by-step trace shown in Details, same as downloads. */
+    synchronized void step(String s) {
+        if (trace.length() > 600) trace.delete(0, trace.length() - 400);
+        trace.append("\n- ").append(s);
+    }
 
     Upload(String user, Shares.Entry e) { this.user = user; this.file = e.vpath; this.entry = e; }
 
@@ -27,8 +34,9 @@ public final class Upload {
         return sb.toString();
     }
 
-    public String details() {
+    public synchronized String details() {
         return file + "\n\nTo: " + user + "\nStatus: " + NAMES[state] + "\nProgress: "
-            + Util.size(done) + " / " + Util.size(entry.size) + (info.length() > 0 ? "\n" + info : "");
+            + Util.size(done) + " / " + Util.size(entry.size) + (info.length() > 0 ? "\n" + info : "")
+            + (trace.length() > 0 ? "\n\nSteps:" + trace.toString() : "");
     }
 }

@@ -162,6 +162,7 @@ final class PeerConn implements Runnable {
             Client.Pending pd = c.takePending(tok, this);
             if (pd == null) throw new IOException("unknown pierce token");
             user = pd.user; type = pd.type; upload = pd.upload;
+            if (upload != null) upload.step("They connected to us (F)");
         } else if (code == 1) { // PeerInit
             user = r.str();
             type = r.str();
@@ -209,11 +210,13 @@ final class PeerConn implements Runnable {
     /** We are the uploader: FileTransferInit(token), read the offset, stream the file. */
     private void sendFile() throws IOException {
         Upload u = upload;
+        u.step("Data connection open, sent token");
         send(new Msg().u32(u.token).toRaw());
         byte[] ob = new byte[8];
         Util.readFully(in, ob, 0, 8);
         long offset = new Rd(ob, 0, 8).u64();
         if (offset < 0 || offset > u.entry.size) offset = 0;
+        u.step(offset > 0 ? "They resume from " + Util.size(offset) : "They start from 0");
         javax.microedition.io.file.FileConnection fc = null;
         InputStream fin = null;
         try {
@@ -223,6 +226,7 @@ final class PeerConn implements Runnable {
             } catch (SecurityException e) {
                 throw new IOException("phone denied reading the file");
             }
+            u.step("File open: " + Util.decodeUrl(u.entry.url));
             long skipped = 0;
             while (skipped < offset) {
                 long k = fin.skip(offset - skipped);

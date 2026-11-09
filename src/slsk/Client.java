@@ -793,6 +793,7 @@ public final class Client implements Runnable {
         }
         if (uploadFor(p.user, file) != null) return;
         Upload u = new Upload(p.user, e);
+        u.step("Queued: " + p.user + " asked for it");
         uploads.addElement(u);
         uploadChanged(u);
         processUploads();
@@ -816,6 +817,7 @@ public final class Client implements Runnable {
             next.token = rnd.nextInt() & 0x7fffffff;
         }
         final Upload u = next;
+        u.step("Slot free, offering it (TransferRequest)");
         uploadChanged(u);
         new Thread(new Runnable() {
             public void run() {
@@ -830,6 +832,8 @@ public final class Client implements Runnable {
 
     void uploadFailed(Upload u, String why, boolean tellPeer) {
         if (u.finished()) return;
+        u.step("Failed: " + why);
+        if (!"Cancelled".equals(why)) log("Upload to " + u.user + " failed: " + why);
         u.state = Upload.FAILED;
         u.info = why;
         uploadChanged(u);
@@ -842,6 +846,8 @@ public final class Client implements Runnable {
     }
 
     void uploadDone(Upload u) {
+        u.step("Done, sent " + Util.size(u.entry.size));
+        log("Uploaded " + Util.baseName(u.file) + " to " + u.user);
         u.state = Upload.DONE;
         u.info = "Sent";
         uploadedTotal++;
@@ -869,14 +875,18 @@ public final class Client implements Runnable {
         new Thread(new Runnable() {
             public void run() {
                 try {
+                    u.step("Downloader accepted, looking up their address");
                     int[] a = getAddress(u.user);
                     if (a != null && a[1] != 0) {
+                        u.step("Data connection to " + Util.ip(a[0]) + ":" + a[1]);
                         PeerConn f = PeerConn.uploadTo(Client.this, u, Util.ip(a[0]), a[1]);
                         f.start();
                         if (f.waitReady(25000)) return; // PeerConn takes it from here
                         f.close();
-                    }
+                        u.step("Direct connection failed (their port is closed?)");
+                    } else u.step("Server has no address for them");
                     if (listening) {
+                        u.step("Asking them to connect to us instead (F)");
                         int tok = rnd.nextInt() & 0x7fffffff;
                         Pending pd = new Pending();
                         pd.user = u.user; pd.type = "F"; pd.upload = u;
@@ -890,7 +900,8 @@ public final class Client implements Runnable {
                         }
                         pending.remove(new Integer(tok));
                         if (pd.conn != null) return;
-                    }
+                        u.step(pd.failed ? "Server says they can't connect to us" : "They didn't connect to us in 30 s");
+                    } else u.step("Not listening, so they can't connect to us either");
                     uploadFailed(u, "Can't open a data connection to " + u.user, true);
                 } catch (IOException e) {
                     uploadFailed(u, e.getMessage(), true);

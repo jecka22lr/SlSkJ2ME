@@ -1,7 +1,10 @@
 # Changelog
 
-## Next
+## Beta 0.4.2
 
+- Uploads keep a step-by-step trace like downloads (Uploads > Details > Steps): queued, offered,
+  accepted, how the data connection was made or why it failed, resume offset, file opened, done.
+  Finished and failed uploads also show up in the Log
 - Sharing screen: picking a folder or pressing Rescan turns "Share files" on (it used to stay on
   "Don't share", so Rescan silently did nothing)
 - Save/Rescan stays on the sharing screen and shows the result under "Now sharing", including
