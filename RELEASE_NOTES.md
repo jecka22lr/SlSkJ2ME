@@ -1,8 +1,8 @@
-First release of SlskME, a Soulseek client for J2ME phones (CLDC 1.1 / MIDP 2.0 / JSR-75).
+Second alpha of SlskME, a Soulseek client for J2ME phones (CLDC 1.1 / MIDP 2.0 / JSR-75).
 
-**Install:** copy `SlskME.jar` to the phone and open it (or use the `.jad` for OTA). The zip has both.
+**New:** an About screen, reachable from the main menu or the login screen's menu. It shows the version, author, source link, license, protocol credits, your phone's platform string, free memory and the current download folder (handy for bug reports).
 
-**What works:** login, search, downloads with resume and queue position, and NAT-friendly connections, so mobile data works with no port forwarding. It picks a writable download folder automatically.
+**Install:** copy `SlskME.jar` to the phone and open it (or use the `.jad` for OTA). The zip has both. Uninstall the previous version first.
 
 **Not yet:** sharing/uploads, chat rooms, private messages, browsing users, wishlist. Since it shares nothing, some users will deny downloads.
 

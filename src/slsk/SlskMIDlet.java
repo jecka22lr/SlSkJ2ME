@@ -53,9 +53,12 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private final Command cClear = new Command("Clear finished", Command.SCREEN, 5);
     private final Command cCancel = new Command("Cancel", Command.CANCEL, 1);
     private final Command cDl = new Command("Downloads", Command.SCREEN, 4);
+    private final Command cAbout = new Command("About", Command.HELP, 8);
+    private Form aboutF;
+    private Displayable aboutBack;
     private Form connF;
 
-    private static final String[] MENU = { "Search", "Results", "Downloads", "Log", "Download folder", "Log out" };
+    private static final String[] MENU = { "Search", "Results", "Downloads", "Log", "Download folder", "About", "Log out" };
     private List folderL;
     private final Vector folderDirs = new Vector();
 
@@ -98,6 +101,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         loginF.append(fListen);
         loginF.append(fDir);
         loginF.addCommand(cLogin);
+        loginF.addCommand(cAbout);
         loginF.addCommand(cExit);
         loginF.setCommandListener(this);
     }
@@ -205,6 +209,27 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         display.setCurrent(dlL);
     }
 
+    private void showAbout(Displayable back) {
+        aboutBack = back;
+        String ver = getAppProperty("MIDlet-Version");
+        Runtime rt = Runtime.getRuntime();
+        String platform = System.getProperty("microedition.platform");
+        aboutF = new Form("About");
+        aboutF.append(new StringItem("SlskME", "Alpha " + (ver == null ? "?" : ver) + "\n"));
+        aboutF.append(new StringItem(null, "A Soulseek client for J2ME phones. Talks to the Soulseek network directly, no proxy.\n"));
+        aboutF.append(new StringItem("Author", "jecka22lr\n"));
+        aboutF.append(new StringItem("Source", "github.com/jecka22lr/SlSkJ2ME\n"));
+        aboutF.append(new StringItem("License", "MIT\n"));
+        aboutF.append(new StringItem("Protocol", "Based on the Nicotine+ project's Soulseek protocol docs. Not affiliated with Soulseek.\n"));
+        aboutF.append(new StringItem("Phone", (platform == null ? "unknown" : platform) + "\n"));
+        aboutF.append(new StringItem("Memory", Util.size(rt.freeMemory()) + " free of " + Util.size(rt.totalMemory()) + "\n"));
+        String dir = fDir != null ? fDir.getString() : "";
+        if (dir.length() > 0) aboutF.append(new StringItem("Downloads", dir + "\n"));
+        aboutF.addCommand(cBack);
+        aboutF.setCommandListener(this);
+        display.setCurrent(aboutF);
+    }
+
     private void useFolder(String d) {
         fDir.setString(d);
         if (client != null) client.setDownloadDir(d);
@@ -261,6 +286,10 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (c == cDl && client != null) {
             if (d == infoF || d == resL || d == searchTB || d == logF || d == mainL) dlBack = d;
             showDownloads();
+        } else if (c == cAbout && d == loginF) {
+            showAbout(loginF);
+        } else if (d == aboutF) {
+            display.setCurrent(aboutBack != null ? aboutBack : loginF);
         } else if (d == loginF && c == cLogin) {
             doLogin();
         } else if (d == mainL && c == List.SELECT_COMMAND) {
@@ -270,7 +299,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             case 2: dlBack = mainL; showDownloads(); break;
             case 3: display.setCurrent(logF); break;
             case 4: showFolders(); break;
-            case 5:
+            case 5: showAbout(mainL); break;
+            case 6:
                 client.logout();
                 client = null;
                 display.setCurrent(loginF);

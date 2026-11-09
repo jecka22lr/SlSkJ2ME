@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.1.3 (first release)
+## Alpha 0.1.4
+
+- About screen (main menu, or the login screen's menu): version, author, source link, license,
+  protocol credits, phone platform, free memory and the current download folder
+
+## Alpha 0.1.3 (first release)
 
 - Login to server.slsknet.org (new names register automatically), cancel while connecting
 - Search with results streamed in, free-slot results first, bitrate/length/queue info

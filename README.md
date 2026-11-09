@@ -17,6 +17,7 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - Finds a folder the phone lets an unsigned app write to; **Download folder** in the menu tests them all
 - Downloads list reachable from any screen, results marked `[DL]` queued, `[OK]` done, `[X]` failed
 - Each download keeps a step trace (open Details) so failures say exactly where they broke
+- About screen with version, source link, phone platform and free memory (useful for bug reports)
 
 Not implemented yet: sharing/uploads, chat rooms, private messages, browsing users, wishlist.
 You will be blocked by users who do not like downloaders without shares for now. 
