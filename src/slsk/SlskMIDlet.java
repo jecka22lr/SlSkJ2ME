@@ -372,7 +372,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         Runtime rt = Runtime.getRuntime();
         String platform = System.getProperty("microedition.platform");
         aboutF = new Form("About");
-        aboutF.append(new StringItem("SlskME", "Alpha " + (ver == null ? "?" : ver) + "\n"));
+        aboutF.append(new StringItem("SlskME", "Beta " + (ver == null ? "?" : ver) + "\n"));
         aboutF.append(new StringItem(null, "A Soulseek client for J2ME phones. Talks to the Soulseek network directly, no proxy.\n"));
         aboutF.append(new StringItem("Author", "jecka22lr\n"));
         aboutF.append(new StringItem("Source", "github.com/jecka22lr/SlSkJ2ME\n"));

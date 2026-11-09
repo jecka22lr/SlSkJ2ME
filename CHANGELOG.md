@@ -1,6 +1,6 @@
 # Changelog
 
-## Alpha 0.4.1
+## Beta 0.4.1
 
 - Commands have short soft-key labels (Get, Open, Downloads, Next...), so they no longer get
   cut off on narrow screens; the menu still shows the full names
@@ -8,7 +8,7 @@
 - Emulator screenshot testing: `test/emu/` builds MicroEmulator from source and drives the real
   jar against a mock server on a virtual display
 
-## Alpha 0.4.0
+## Beta 0.4.0
 
 - Search results regrouped like desktop clients: user (free slot / queue, speed),
   then each folder, then its files with size, bitrate and length
@@ -18,20 +18,20 @@
 - Free-slot users first, then fastest; paging repeats the user/folder header when a page
   starts mid-group (80 rows per page)
 
-## Alpha 0.3.2
+## Beta 0.3.2
 
 - Testing a save location no longer leaves empty "Soulseek" folders behind
   (older versions created them in every folder they tried, including app-private storage)
 - Folder picker lists real drives (C:/, E:/) first; extra named roots some phones add are marked "(shortcut)"
 - Private folders are labelled "app storage, hidden" and are never picked automatically
 
-## Alpha 0.3.1
+## Beta 0.3.1
 
 - Folder picker: browse drives and folders, go up, create a new folder.
   Used by **Profile & sharing > Pick shared folder** and **Save location > Browse folders**
   (save locations are write-tested before they're accepted)
 
-## Alpha 0.3.0
+## Beta 0.3.0
 
 - Auto-reconnect: a dropped connection retries by itself (5 s, doubling up to 2 min),
   rejoins your chat rooms and re-sends queued download requests
@@ -44,20 +44,20 @@
 - Clearer names: "Download file" vs "My downloads", "Save location" vs "Download whole folder"
 - Nokia JAD attributes (application category, no on-screen keypad on touch S60)
 
-## Alpha 0.2.2
+## Beta 0.2.2
 
 - Search results are paged, 100 per page (Next page / Previous page). Title shows p2/7.
 - Keeps up to 2000 results per search, or fewer if the phone's memory runs low
 - Results list repaints in batches once a search is busy, so the UI stays responsive
 
-## Alpha 0.2.1
+## Beta 0.2.1
 
 - Search keeps at most 25 results per user, so a few users with big lossless folders
   can't fill the list and crowd out everyone else (total cap raised to 600)
 - Results "Filter": all / MP3 only / FLAC only / lossy / lossless / free slots only.
   Title shows shown/total when a filter is on.
 
-## Alpha 0.2.0
+## Beta 0.2.0
 
 - Sharing: pick a folder on the phone, it gets scanned and reported to the server
 - Uploads: people can queue and download your shared files (upload slots configurable)
@@ -71,12 +71,12 @@
 - Wishlist: saved searches run on the server's schedule, hits get their own results list
 - Profile & sharing screen: profile text, online/away, shared folder, upload slots
 
-## Alpha 0.1.4
+## Beta 0.1.4
 
 - About screen (main menu, or the login screen's menu): version, author, source link, license,
   protocol credits, phone platform, free memory and the current download folder
 
-## Alpha 0.1.3 (first release)
+## Beta 0.1.3 (first release)
 
 - Login to server.slsknet.org (new names register automatically), cancel while connecting
 - Search with results streamed in, free-slot results first, bitrate/length/queue info
