@@ -62,6 +62,7 @@ final class SocialUI implements CommandListener {
     private final Command cPickImage = new Command("Image", "Pick background image", Command.SCREEN, 3);
     private javax.microedition.lcdui.Gauge gR, gG, gB, gDim;
     private ChoiceGroup gDimDir;
+    private javax.microedition.lcdui.Gauge gBoxes;
     private TextField fHex;
     private javax.microedition.lcdui.ImageItem preview;
     private int pickColor;
@@ -235,9 +236,12 @@ final class SocialUI implements CommandListener {
         gDimDir.setSelectedIndex(ChatColors.dimDir, true);
         colorsF.append(gDim);
         colorsF.append(gDimDir);
+        gBoxes = new javax.microedition.lcdui.Gauge(boxLabel(ChatColors.boxes), true, 10, ChatColors.boxes / 10);
+        colorsF.append(gBoxes);
         colorsF.setItemStateListener(new javax.microedition.lcdui.ItemStateListener() {
             public void itemStateChanged(javax.microedition.lcdui.Item it) {
                 if (it == gDim) gDim.setLabel("Image dimming (" + gDim.getValue() * 10 + "%)");
+                if (it == gBoxes) gBoxes.setLabel(boxLabel(gBoxes.getValue() * 10));
             }
         });
         colorsF.append(new StringItem(null, "Colour: #" + hex(ChatColors.bgColor)
@@ -262,6 +266,7 @@ final class SocialUI implements CommandListener {
         ChatColors.fit = gFit.getSelectedIndex();
         ChatColors.dim = gDim.getValue() * 10;
         ChatColors.dimDir = gDimDir.getSelectedIndex();
+        ChatColors.boxes = gBoxes.getValue() * 10;
         ChatColors.forget();
         ChatColors.save();
     }
@@ -271,6 +276,10 @@ final class SocialUI implements CommandListener {
         if (colorsBack == roomF && curRoom != null) openRoom(curRoom);
         else if (colorsBack == convoF && curConvo != null) openConvo(curConvo);
         else d.setCurrent(colorsBack != null ? colorsBack : m.main());
+    }
+
+    private static String boxLabel(int pct) {
+        return "Box behind messages (" + (pct == 0 ? "off" : pct + "% opaque") + ")";
     }
 
     static String hex(int c) {

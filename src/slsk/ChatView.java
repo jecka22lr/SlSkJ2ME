@@ -19,6 +19,8 @@ final class ChatView extends Canvas implements ChatScreen {
     private final Vector wrapped = new Vector();   // String
     private final Vector names = new Vector();     // String nickname at the start of this wrapped line, or ""
     private final Vector nameLens = new Vector();  // Integer chars of that line that are the nickname (incl. ": ")
+    private final Vector msgOf = new Vector();     // Integer: which message each wrapped line belongs to
+    private int boxRowW, boxRowH, boxRowArgb;
     private int wrapW = -1;
     private int top;
     private boolean stick = true;
@@ -59,7 +61,12 @@ final class ChatView extends Canvas implements ChatScreen {
         wrapped.removeAllElements();
         names.removeAllElements();
         nameLens.removeAllElements();
-        for (int i = 0; i < lines.size(); i++) wrapLine((String) lines.elementAt(i), w);
+        msgOf.removeAllElements();
+        for (int i = 0; i < lines.size(); i++) {
+            int before = wrapped.size();
+            wrapLine((String) lines.elementAt(i), w);
+            for (int k = before; k < wrapped.size(); k++) msgOf.addElement(new Integer(i));
+        }
         wrapW = w;
     }
 
@@ -116,6 +123,12 @@ final class ChatView extends Canvas implements ChatScreen {
             g.drawString("No messages yet. Write to start.", 4, y, Graphics.TOP | Graphics.LEFT);
             return;
         }
+        if (ChatColors.boxes > 0) {
+            // boxes are the opposite of the text (dark behind light text), and names are judged against them
+            int box = ChatColors.lum(fg) >= 128 ? 0x000000 : 0xffffff;
+            drawBoxes(g, top, y, lh, w, h, box);
+            bg = ChatColors.mix(bg, box, ChatColors.boxes);
+        }
         for (int i = top; i < wrapped.size() && y < h; i++) {
             String t = (String) wrapped.elementAt(i);
             int n = ((Integer) nameLens.elementAt(i)).intValue();
@@ -137,6 +150,52 @@ final class ChatView extends Canvas implements ChatScreen {
         g.setColor(ChatColors.mix(fg, bg, 40));
         if (top > 0) g.fillTriangle(w - 9, 8, w - 3, 8, w - 6, 3);
         if (top < maxTop()) g.fillTriangle(w - 9, h - 8, w - 3, h - 8, w - 6, h - 3);
+    }
+
+    /** One translucent box per message (as wide as its widest line), in the background's tone. */
+    private void drawBoxes(Graphics g, int first, int y0, int lh, int w, int h, int bg) {
+        int argb = (ChatColors.boxAlpha() << 24) | (bg & 0xffffff);
+        Font bold = Font.getFont(font.getFace(), Font.STYLE_BOLD, font.getSize());
+        int i = first, y = y0;
+        while (i < wrapped.size() && y < h) {
+            int msg = ((Integer) msgOf.elementAt(i)).intValue();
+            int start = y, widest = 0;
+            while (i < wrapped.size() && ((Integer) msgOf.elementAt(i)).intValue() == msg && y < h) {
+                String t = (String) wrapped.elementAt(i);
+                int n = ((Integer) nameLens.elementAt(i)).intValue();
+                int tw = n > 0 ? bold.stringWidth(t.substring(0, n)) + font.stringWidth(t.substring(n)) : font.stringWidth(t);
+                if (tw > widest) widest = tw;
+                y += lh;
+                i++;
+            }
+            // 2px shorter than the lines it covers, so consecutive messages get separate boxes
+            fillTranslucent(g, 1, start - 1, Math.min(w - 2, widest + 6), Math.min(y - start - 1, h - start + 1), argb);
+        }
+    }
+
+    private javax.microedition.lcdui.Image boxImg;
+
+    /** Translucent rectangle: a small see-through image, repeated inside a clip. */
+    private void fillTranslucent(Graphics g, int x, int y, int bw, int bh, int argb) {
+        if (bw <= 0 || bh <= 0) return;
+        int strip = lineH();
+        try {
+            if (boxImg == null || boxRowW < bw || boxRowH != strip || boxRowArgb != argb) {
+                boxRowW = Math.max(bw, getWidth());
+                boxRowH = strip;
+                boxRowArgb = argb;
+                int[] px = new int[boxRowW * boxRowH];
+                for (int k = 0; k < px.length; k++) px[k] = argb;
+                boxImg = javax.microedition.lcdui.Image.createRGBImage(px, boxRowW, boxRowH, true);
+            }
+            int cx = g.getClipX(), cy = g.getClipY(), cw = g.getClipWidth(), ch = g.getClipHeight();
+            g.clipRect(x, y, bw, bh);
+            for (int done = 0; done < bh; done += strip) g.drawImage(boxImg, x, y + done, Graphics.TOP | Graphics.LEFT);
+            g.setClip(cx, cy, cw, ch);
+        } catch (Throwable e) { // no alpha support: plain box in the box colour
+            g.setColor(argb & 0xffffff);
+            g.fillRect(x, y, bw, bh);
+        }
     }
 
     private void scroll(int by) {

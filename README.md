@@ -40,7 +40,7 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - Chat and messages open at the newest line and scroll with Up/Down or by dragging
 - Coloured nicknames in chat: yours, online, offline (colours are customisable)
 - Chat follows your phone theme (dark themes too), or uses the phone's native screen; custom background
-  colour or image (fill, stretch or tile, adjustable dimming)
+  colour or image (fill, stretch or tile, adjustable dimming, optional see-through boxes behind messages)
 
 Uploads only reach people with an open port when you're on mobile data (you can't accept incoming
 connections behind carrier NAT). Big share lists may not fit in phone memory when browsing.

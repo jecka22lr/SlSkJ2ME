@@ -29,6 +29,10 @@ final class ChatColors {
     static String bgImage = "";
     /** How much the image is faded (percent, 0-90) and toward what: 0 auto, 1 darker, 2 lighter. */
     static int dim = 50, dimDir = 0;
+    /** Box behind each message: opacity in percent, 0 = no box, 100 = solid. */
+    static int boxes = 0;
+
+    static int boxAlpha() { return boxes * 255 / 100; }
 
     static Display display;
 
@@ -58,6 +62,7 @@ final class ChatColors {
             dim = idx((String) v.elementAt(8), dim, 91);
             dimDir = idx((String) v.elementAt(9), dimDir, 3);
         }
+        if (v.size() >= 11) boxes = idx((String) v.elementAt(10), boxes, 101);
     }
 
     static void save() {
@@ -72,6 +77,7 @@ final class ChatColors {
         v.addElement("" + fit);
         v.addElement("" + dim);
         v.addElement("" + dimDir);
+        v.addElement("" + boxes);
         SlskMIDlet.saveStrings("slskme-col", v);
     }
 
