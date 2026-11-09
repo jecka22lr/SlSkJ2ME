@@ -69,6 +69,11 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         "Lossless (flac/wav/ape/alac)", "Free slots only" };
     private int filter;
     private List filterL;
+    private static final int PAGE = 100;
+    private int page, slotCount;
+    private volatile boolean resDirty;
+    private final Command cNext = new Command("Next page", Command.SCREEN, 1);
+    private final Command cPrev = new Command("Previous page", Command.SCREEN, 2);
     private List folderL;
     private final Vector folderDirs = new Vector();
 
@@ -141,6 +146,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         resL.addCommand(cDl);
         resL.addCommand(cUser);
         resL.addCommand(cFilter);
+        resL.addCommand(cNext);
+        resL.addCommand(cPrev);
         resL.addCommand(cBack);
         resL.setCommandListener(this);
 
@@ -221,11 +228,32 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         return mark + r.label();
     }
 
-    private void refreshResultMarks() {
-        for (int i = 0; i < shown.size(); i++) {
-            String l = resLabel((Result) shown.elementAt(i));
-            if (!l.equals(resL.getString(i))) resL.set(i, l, null);
+    private void refreshResultMarks() { renderPage(); }
+
+    private int pages() { return Math.max(1, (shown.size() + PAGE - 1) / PAGE); }
+
+    /** Show the current page; only touches rows whose text changed. */
+    private void renderPage() {
+        resDirty = false;
+        if (page >= pages()) page = pages() - 1;
+        int start = page * PAGE;
+        int n = Math.max(0, Math.min(PAGE, shown.size() - start));
+        for (int k = 0; k < n; k++) {
+            String l = resLabel((Result) shown.elementAt(start + k));
+            if (k < resL.size()) { if (!l.equals(resL.getString(k))) resL.set(k, l, null); }
+            else resL.append(l, null);
         }
+        while (resL.size() > n) resL.delete(resL.size() - 1);
+        titleResults();
+    }
+
+    private void clearResults(String title) {
+        resL.deleteAll();
+        shown.removeAllElements();
+        page = 0;
+        slotCount = 0;
+        lastQuery = title;
+        resL.setTitle(title);
     }
 
     private void showDownloads() {
@@ -261,10 +289,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     void toLogin() { display.setCurrent(loginF); }
 
     void showResults(String title) {
-        resL.deleteAll();
-        shown.removeAllElements();
-        lastQuery = title;
-        resL.setTitle(title);
+        clearResults(title);
         display.setCurrent(resL);
     }
 
@@ -384,16 +409,22 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (d == searchTB && c == cGo) {
             String q = searchTB.getString().trim();
             if (q.length() == 0) return;
+            clearResults("Results: " + q);
             lastQuery = q;
-            resL.deleteAll();
-            shown.removeAllElements();
-            resL.setTitle("Results: " + q);
             client.search(q);
             display.setCurrent(resL);
         } else if (d == resL) {
             int i = resL.getSelectedIndex();
-            Result r = i >= 0 && i < shown.size() ? (Result) shown.elementAt(i) : null;
-            if (c == cFilter) {
+            int gi = i < 0 ? -1 : page * PAGE + i;
+            Result r = gi >= 0 && gi < shown.size() ? (Result) shown.elementAt(gi) : null;
+            if (c == cNext || c == cPrev) {
+                int np = page + (c == cNext ? 1 : -1);
+                if (np >= 0 && np < pages()) {
+                    page = np;
+                    renderPage();
+                    if (resL.size() > 0) resL.setSelectedIndex(0, true);
+                }
+            } else if (c == cFilter) {
                 filterL = new List("Show", List.IMPLICIT, FILTERS, null);
                 filterL.setSelectedIndex(filter, true);
                 filterL.addCommand(cBack);
@@ -468,6 +499,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                     display.callSerially(new Runnable() {
                         public void run() {
                             if (client != null && display.getCurrent() == dlL) refreshDownloads();
+                            if (client != null && resDirty && display.getCurrent() == resL) renderPage();
                             if (client != null && social.showingUploads()) social.refreshUploads();
                         }
                     });
@@ -543,36 +575,34 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
 
     private void titleResults() {
         int total = client == null ? shown.size() : client.results.size();
-        resL.setTitle((filter == 0 ? "" + total : shown.size() + "/" + total) + ": " + lastQuery);
+        String count = filter == 0 ? "" + total : shown.size() + "/" + total;
+        String pg = pages() > 1 ? "p" + (page + 1) + "/" + pages() + " " : "";
+        resL.setTitle(pg + count + ": " + lastQuery);
     }
 
     private void addResult(Result r) {
         if (!passes(r)) return;
-        // free-slot results go to the top, queued ones to the bottom
-        if (r.slot) {
-            int i = 0;
-            while (i < shown.size() && ((Result) shown.elementAt(i)).slot) i++;
-            shown.insertElementAt(r, i);
-            resL.insert(i, resLabel(r), null);
-        } else {
-            shown.addElement(r);
-            resL.append(resLabel(r), null);
-        }
+        // free-slot results go first, queued ones after
+        if (r.slot) shown.insertElementAt(r, slotCount++);
+        else shown.addElement(r);
+        resDirty = true;
     }
 
     private void refilter() {
-        resL.deleteAll();
         shown.removeAllElements();
+        slotCount = 0;
+        page = 0;
         Vector v = client.results;
         for (int i = 0; i < v.size(); i++) addResult((Result) v.elementAt(i));
-        titleResults();
+        renderPage();
     }
 
     public void result(final Result r) {
         display.callSerially(new Runnable() {
             public void run() {
                 addResult(r);
-                titleResults();
+                // the first page fills live; after that the 1 s timer repaints in batches
+                if (resL.size() < PAGE && page == 0) renderPage();
             }
         });
     }

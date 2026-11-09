@@ -34,7 +34,7 @@ public final class Client implements Runnable {
     volatile String downloadDir;
     int maxSearchBytes = 192 * 1024;
     int maxBrowseBytes = 1536 * 1024;
-    int maxResults = 600;
+    int maxResults = 2000;
     /** Max results kept per user, so a few big lossless folders can't fill the whole list. */
     int perUserCap = 25;
     private final Hashtable perUser = new Hashtable();
@@ -423,6 +423,11 @@ public final class Client implements Runnable {
         Vector dest = wish ? wishResults : results;
         int cap = wish ? 200 : maxResults;
         if (dest.size() >= cap) return;
+        // stop collecting before the phone runs out of heap
+        if (dest.size() > 150 && Runtime.getRuntime().freeMemory() < 350 * 1024) {
+            System.gc();
+            if (Runtime.getRuntime().freeMemory() < 350 * 1024) return;
+        }
         int n = r.u32();
         Result[] got = new Result[Math.min(n, 2000)];
         int k = 0;

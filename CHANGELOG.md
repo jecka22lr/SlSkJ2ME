@@ -1,5 +1,11 @@
 # Changelog
 
+## Alpha 0.2.2
+
+- Search results are paged, 100 per page (Next page / Previous page). Title shows p2/7.
+- Keeps up to 2000 results per search, or fewer if the phone's memory runs low
+- Results list repaints in batches once a search is busy, so the UI stays responsive
+
 ## Alpha 0.2.1
 
 - Search keeps at most 25 results per user, so a few users with big lossless folders
