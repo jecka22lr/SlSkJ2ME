@@ -600,6 +600,7 @@ public final class Client implements Runnable {
 
     /** Scan the share folder (blocking) and tell the server how much we share. */
     public int scanShares(String dir) throws IOException {
+        shares.wanted = true;
         int n = shares.scan(dir);
         shares.enabled = n > 0;
         sendShareCounts();
@@ -607,7 +608,21 @@ public final class Client implements Runnable {
         return n;
     }
 
+    /** Skipped files and first reason from the last scan, or null if none were skipped. */
+    public String scanProblems() {
+        return shares.skipped == 0 ? null : shares.skipped + " skipped (" + shares.firstError + ")";
+    }
+
+    void downloadSaved(String url, long size) {
+        if (shares.wanted && shares.add(url, size)) {
+            shares.enabled = true;
+            sendShareCounts();
+            ui.event(EV_SHARES, new Integer(shares.files()), null);
+        }
+    }
+
     public void disableShares() {
+        shares.wanted = false;
         shares.enabled = false;
         sendShareCounts();
     }

@@ -27,7 +27,7 @@ final class FolderPicker implements CommandListener {
     private String cur; // null = list of drives
     private TextBox newTB;
 
-    private final Command cUse = new Command("Use this folder", Command.OK, 1);
+    private final Command cUse = new Command("Use", "Use this folder", Command.OK, 1);
     private final Command cNew = new Command("New folder", Command.SCREEN, 2);
     private final Command cCancel = new Command("Cancel", Command.CANCEL, 3);
     private final Command cMake = new Command("Create", Command.OK, 1);

@@ -350,7 +350,8 @@ final class SocialUI implements CommandListener {
         fSharing.setSelectedIndex(sharing ? 0 : 1, true);
         fShare = new TextField("Shared folder", shareDir, 200, TextField.URL);
         fSlots = new TextField("Upload slots", slots, 1, TextField.NUMERIC);
-        shareInfo = new StringItem("Now sharing", c().sharedFiles() + " files in " + c().sharedDirs() + " folders");
+        shareInfo = new StringItem("Now sharing", !sharing ? "not sharing"
+            : c().sharedFiles() + " files in " + c().sharedDirs() + " folders");
         myF.append(fDesc);
         myF.append(fStatus);
         myF.append(fSharing);
@@ -381,8 +382,14 @@ final class SocialUI implements CommandListener {
         if (!sharing) {
             if (wasSharing) cl.disableShares();
             shareInfo.setText("not sharing");
+        } else if (shareDir.length() == 0) {
+            m.alert("Sharing", "Pick a folder to share first", myF);
+            return;
         } else if (rescan || !wasSharing || !shareDir.equals(oldDir)) {
             startScan();
+            // stay here so the scan result shows up under "Now sharing"
+            m.alert("Sharing", "Saved. Scanning " + Util.decodeUrl(shareDir) + "...", myF);
+            return;
         }
         m.alert("Profile", "Saved", m.main());
     }
@@ -397,7 +404,10 @@ final class SocialUI implements CommandListener {
                 String msg;
                 try {
                     int n = cl.scanShares(shareDir);
-                    msg = "Sharing " + n + " files in " + cl.sharedDirs() + " folders";
+                    msg = n == 0 ? "Nothing to share: no readable files in " + Util.decodeUrl(shareDir)
+                        : "Sharing " + n + (n == 1 ? " file in " : " files in ") + cl.sharedDirs() + (cl.sharedDirs() == 1 ? " folder" : " folders");
+                    String p = cl.scanProblems();
+                    if (p != null) msg += "\n" + p;
                 } catch (Throwable e) {
                     msg = "Share scan failed: " + e.getMessage();
                 }
@@ -620,14 +630,21 @@ final class SocialUI implements CommandListener {
         } else if (s == myF && c == cPick) {
             new FolderPicker(d, "Pick folder to share", new FolderPicker.Done() {
                 public void picked(String url) {
-                    if (url != null) fShare.setString(url);
+                    if (url != null) {
+                        fShare.setString(url);
+                        fSharing.setSelectedIndex(0, true); // picking a folder to share means sharing it
+                        shareInfo.setText("Picked. Save or Rescan to share it.");
+                    }
                     d.setCurrent(myF);
                 }
             }).show(fShare.getString().trim().length() > 0 ? fShare.getString().trim() : null);
         } else if (s == myF) {
             if (c == cBack) m.showMain();
             else if (c == cSave) saveMyProfile(false);
-            else if (c == cRescan) saveMyProfile(true);
+            else if (c == cRescan) {
+                fSharing.setSelectedIndex(0, true); // rescanning only makes sense while sharing
+                saveMyProfile(true);
+            }
         } else if (s == upL) {
             int i = upL.getSelectedIndex();
             Upload u = i >= 0 && i < upRows.size() ? (Upload) upRows.elementAt(i) : null;

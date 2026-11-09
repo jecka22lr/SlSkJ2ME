@@ -17,11 +17,17 @@ final class Shares {
     }
 
     volatile boolean enabled;
+    /** User turned sharing on (stays true even while the folder is still empty). */
+    volatile boolean wanted;
     int maxFiles = 1500;
     private Vector entries = new Vector();
     private Hashtable byPath = new Hashtable();
     private int dirs;
     private byte[] cachedList;
+    private String rootUrl, rootName;
+    /** Files the last scan had to skip, and the first reason. */
+    int skipped;
+    String firstError;
 
     synchronized int files() { return entries.size(); }
 
@@ -37,6 +43,8 @@ final class Shares {
         if (rootName.length() == 0 || rootName.endsWith(":")) rootName = "Shared";
         Vector out = new Vector();
         int[] nd = new int[1];
+        skipped = 0;
+        firstError = null;
         scanDir(rootUrl, rootName, out, nd, 0);
         Hashtable h = new Hashtable();
         for (int i = 0; i < out.size(); i++) {
@@ -48,6 +56,8 @@ final class Shares {
             byPath = h;
             dirs = nd[0];
             cachedList = null;
+            this.rootUrl = rootUrl;
+            this.rootName = rootName;
         }
         return out.size();
     }
@@ -68,11 +78,27 @@ final class Shares {
                 }
                 long size = -1;
                 String furl = url + Util.urlEscape(name);
+                String why = null;
                 try {
                     FileConnection f = (FileConnection) Connector.open(furl, Connector.READ);
                     try { size = f.fileSize(); } finally { f.close(); }
-                } catch (Exception e) {}
-                if (size < 0) continue;
+                } catch (Throwable e) {
+                    why = e.toString();
+                }
+                if (size < 0) {
+                    // some phones refuse a second connection (or prompt again); ask through the folder's own one
+                    try {
+                        fc.setFileConnection(name);
+                        try { size = fc.fileSize(); } finally { fc.setFileConnection(".."); }
+                    } catch (Throwable e) {
+                        if (why == null) why = e.toString();
+                    }
+                }
+                if (size < 0) {
+                    skipped++;
+                    if (firstError == null) firstError = name + ": " + (why != null ? why : "no size");
+                    continue;
+                }
                 Entry e = new Entry();
                 e.vpath = vdir + "\\" + name;
                 e.url = furl;
@@ -91,6 +117,41 @@ final class Shares {
                 scanDir(url + Util.urlEscape(s) + "/", vdir + "\\" + s, out, nd, depth + 1);
             } catch (Exception e) {}
         }
+    }
+
+    /** A download just finished at url: share it right away if it's inside the shared folder. */
+    synchronized boolean add(String url, long size) {
+        if (rootUrl == null || !url.startsWith(rootUrl) || size < 0) return false;
+        String rel = Util.decodeUrl(url.substring(rootUrl.length()));
+        StringBuffer vp = new StringBuffer(rootName);
+        vp.append('\\');
+        for (int i = 0; i < rel.length(); i++) {
+            char ch = rel.charAt(i);
+            vp.append(ch == '/' ? '\\' : ch);
+        }
+        String vpath = vp.toString();
+        Entry e = (Entry) byPath.get(vpath);
+        if (e == null) {
+            if (entries.size() >= maxFiles) return false;
+            String dir = dirOf(vpath);
+            boolean newDir = true;
+            for (int i = 0; i < entries.size() && newDir; i++)
+                if (dirOf(((Entry) entries.elementAt(i)).vpath).equals(dir)) newDir = false;
+            e = new Entry();
+            e.vpath = vpath;
+            e.url = url;
+            e.lower = vpath.toLowerCase();
+            // keep files of one folder together; listResponse groups consecutive entries
+            int at = entries.size();
+            for (int i = entries.size() - 1; i >= 0; i--)
+                if (dirOf(((Entry) entries.elementAt(i)).vpath).equals(dir)) { at = i + 1; break; }
+            entries.insertElementAt(e, at);
+            byPath.put(vpath, e);
+            if (newDir) dirs++;
+        }
+        e.size = size;
+        cachedList = null;
+        return true;
     }
 
     /** Soulseek-style match: every word must appear, "-word" excludes. */

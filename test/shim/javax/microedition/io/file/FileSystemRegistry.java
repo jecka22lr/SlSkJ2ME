@@ -7,9 +7,12 @@ public class FileSystemRegistry {
   public static String ROOT = "/tmp/slskfs/";
   public static javax.microedition.io.Connection file(String url) throws IOException {
     if (url.contains("DENY")) throw new SecurityException("Access denied");
+    // "NOOPEN" files act like phones that refuse a second connection per file
+    if (url.contains("NOOPEN") && !url.endsWith("/")) throw new SecurityException("Access denied");
     String path = java.net.URLDecoder.decode(url.substring("file:///".length()), "UTF-8");
-    final File f = new File(ROOT + path);
+    final File[] cur = { new File(ROOT + path) };
     return (javax.microedition.io.Connection) Proxy.newProxyInstance(FileSystemRegistry.class.getClassLoader(), new Class[]{FileConnection.class}, (p, me, a) -> {
+      File f = cur[0];
       switch (me.getName()) {
         case "exists": return f.exists();
         case "mkdir": f.mkdirs(); return null;
@@ -24,6 +27,7 @@ public class FileSystemRegistry {
           if (a == null) return new FileOutputStream(f);
           final RandomAccessFile r = new RandomAccessFile(f, "rw"); r.seek((Long) a[0]);
           return new OutputStream() { public void write(int b) throws IOException { r.write(b); } public void write(byte[] b, int o, int l) throws IOException { r.write(b, o, l); } public void close() throws IOException { r.close(); } };
+        case "setFileConnection": { String n = (String) a[0]; cur[0] = n.equals("..") ? f.getParentFile() : new File(f, n.endsWith("/") ? n.substring(0, n.length() - 1) : n); return null; }
         default: return null; } });
   }
 }

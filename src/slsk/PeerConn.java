@@ -288,9 +288,11 @@ final class PeerConn implements Runnable {
                 long now = System.currentTimeMillis();
                 if (now - lastUi > 700) { lastUi = now; c.changed(t); }
             }
+            String savedUrl = sink.url;
             sink.close();
             sink = null;
             t.state = Transfer.DONE;
+            c.downloadSaved(savedUrl, t.size);
             t.info = "Saved";
             t.step("Done");
             c.log("Finished " + Util.baseName(t.file));

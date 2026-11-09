@@ -16,10 +16,10 @@ final class Store {
         final FileConnection fc;
         OutputStream os;
         final long offset;
-        final String name, where;
+        final String name, where, url;
 
-        Sink(FileConnection fc, long offset, String name, String where) throws IOException {
-            this.fc = fc; this.offset = offset; this.name = name; this.where = where;
+        Sink(FileConnection fc, long offset, String name, String where, String url) throws IOException {
+            this.fc = fc; this.offset = offset; this.name = name; this.where = where; this.url = url;
             os = fc.openOutputStream(offset);
         }
 
@@ -59,7 +59,7 @@ final class Store {
         FileConnection fc = (FileConnection) Connector.open(url, Connector.READ_WRITE);
         try {
             if (!fc.exists()) fc.create();
-            return new Sink(fc, fc.fileSize(), name, dir + name);
+            return new Sink(fc, fc.fileSize(), name, dir + name, url);
         } catch (IOException e) {
             fc.close();
             throw e;

@@ -14,6 +14,11 @@ CP=build/classes:$T/shim:$T/api
 javac -nowarn -cp $CP -d $T/cls test/src/*.java
 java -cp $T/cls:$CP slsk.Tests
 java -cp $T/cls:$CP slsk.FolderT
+mkdir -p "/tmp/slskfs/E:/ShareT/Album" "/tmp/slskfs/E:/ShareT/Live"
+head -c 10 /dev/zero > "/tmp/slskfs/E:/ShareT/Album/01 Song.mp3"
+head -c 5 /dev/zero > "/tmp/slskfs/E:/ShareT/Album/NOOPEN 05 Track.mp3"
+head -c 7 /dev/zero > "/tmp/slskfs/E:/ShareT/Live/a b.flac"
+timeout 30 java -cp $T/cls:$CP slsk.SharesT
 rm -rf /tmp/slskfs
 python3 test/mock.py 25 > $T/mock.log 2>&1 &
 sleep 1

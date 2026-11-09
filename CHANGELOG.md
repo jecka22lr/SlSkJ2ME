@@ -1,5 +1,16 @@
 # Changelog
 
+## Next
+
+- Sharing screen: picking a folder or pressing Rescan turns "Share files" on (it used to stay on
+  "Don't share", so Rescan silently did nothing)
+- Save/Rescan stays on the sharing screen and shows the result under "Now sharing", including
+  how many files were skipped and why, instead of jumping back to the main menu
+- Files the phone won't open one by one are sized through the folder's own connection instead
+  of being skipped
+- Finished downloads saved inside the shared folder are shared right away, no rescan needed
+- About screen says Beta; folder picker's "Use this folder" soft key no longer gets cut off
+
 ## Beta 0.4.1
 
 - Commands have short soft-key labels (Get, Open, Downloads, Next...), so they no longer get
