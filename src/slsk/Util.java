@@ -24,7 +24,7 @@ final class Util {
     static byte[] rawBytes(String s) { return (byte[]) rawNames.get(s); }
 
     static void rememberRaw(String s, byte[] raw) {
-        if (rawNames.size() > 3000) rawNames.clear();
+        if (rawNames.size() > 3000 && !rawNames.containsKey(s)) rawNames.clear(); // downloads re-add theirs (Transfer.raw)
         rawNames.put(s, raw);
     }
 

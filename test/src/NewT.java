@@ -20,6 +20,18 @@ public class NewT {
     byte[] cut = { 'a', (byte) 0xc3 };
     check(!Util.validUtf8(cut, 0, 2), "truncated sequence rejected");
 
+    // a download with a non-UTF-8 name keeps its bytes even if the name cache gets cleared
+    Transfer tr = new Transfer("u", s, 1);
+    for (int i = 0; i < 3100; i++) Util.rememberRaw("filler" + i, new byte[] { 1 });
+    check(Util.rawBytes(s) == null, "name cache was cleared");
+    if (tr.raw != null) Util.rememberRaw(tr.file, tr.raw); // what Client.queue does
+    check(java.util.Arrays.equals(Util.utf8(s), latin), "transfer restores its raw name bytes");
+
+    // chat nicknames
+    check(ChatView.nameOf("jecka: hi: there").equals("jecka"), "nickname before the first ': '");
+    check(ChatView.nameOf("no nickname here").equals(""), "line without nickname");
+    check(ChatView.nameOf(": odd").equals(""), "empty nickname ignored");
+
     // throttle: 200 KB at 100 KB/s takes about 2 s
     Throttle th = new Throttle();
     th.kbps = 100;

@@ -38,6 +38,7 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - Interests: likes and dislikes, personal and global recommendations, similar users, who likes what
 - Private rooms: create, invite and remove members, see private rooms you belong to, leave for good
 - Chat and messages open at the newest line and scroll with Up/Down or by dragging
+- Coloured nicknames in chat: yours, online, offline (colours are customisable)
 
 Uploads only reach people with an open port when you're on mobile data (you can't accept incoming
 connections behind carrier NAT). Big share lists may not fit in phone memory when browsing.

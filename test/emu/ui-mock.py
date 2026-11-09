@@ -45,6 +45,20 @@ def server(c):
         code, p = rmsg(c)
         if code == 1:
             c.sendall(frame(1, b'\x01' + s('Welcome to the mock server') + LO + s('x') + b'\x00'))
+        elif code == 64:
+            c.sendall(frame(64, struct.pack('<I', 1) + s('nokia') + struct.pack('<II', 1, 3) + struct.pack('<III', 0, 0, 0)))
+        elif code == 14:
+            rs = p[4:4 + struct.unpack_from('<I', p)[0]].decode()
+            c.sendall(frame(14, s(rs) + struct.pack('<I', 3) + s('vinylhead') + s('nokiafan') + s('jecka')))
+            for u, m in [('vinylhead', 'anyone got the tape moths demos?'), ('ghostuser', 'I had them, logging off now, bye everyone'),
+                         ('nokiafan', 'check my shares, singles folder'), ('jecka', 'thanks, grabbing them now')]:
+                c.sendall(frame(13, s(rs) + s(u) + s(m)))
+        elif code == 13:
+            rs, = struct.unpack_from('<I', p); room = p[4:4 + rs].decode(); msg = p[8 + rs:].decode()
+            c.sendall(frame(13, s(room) + s('jecka') + s(msg)))
+        elif code == 7:
+            u = p[4:].decode()
+            c.sendall(frame(7, s(u) + struct.pack('<I', 0 if u == 'flacmonster' else 2) + b'\x00'))
         elif code == 26:
             st['tok'], = struct.unpack_from('<I', p)
             for i, (name, port) in enumerate(PEERS.items()):

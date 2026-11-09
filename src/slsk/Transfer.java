@@ -29,8 +29,12 @@ public final class Transfer {
         trace.append("\n- ").append(s);
     }
 
+    /** Original bytes of a non-UTF-8 file name, or null. */
+    final byte[] raw;
+
     Transfer(String user, String file, long size) {
         this.user = user; this.file = file; this.size = size;
+        this.raw = Util.rawBytes(file);
     }
 
     public boolean active() { return state == RUNNING || state == STARTING; }

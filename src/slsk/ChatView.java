@@ -6,25 +6,32 @@ import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
 
 /**
- * Chat / private message view. Draws its own wrapped text so it can always open at the newest
+ * Chat / private message view. Only the nickname is coloured (own / online / offline, see ChatColors). Draws its own wrapped text so it can always open at the newest
  * line (LCDUI Forms open at the top, and phones differ on whether they let you scroll them).
  * Up/Down or dragging scrolls; new lines keep it pinned to the bottom unless you've scrolled up.
  */
 final class ChatView extends Canvas {
-    private final String me;
+    /** Colour for a nickname, decided by whoever shows this view. */
+    interface Namer { int color(String name); }
+
+    private final Namer namer;
     private final Vector lines = new Vector();
     private final Vector wrapped = new Vector();   // String
-    private final Vector mine = new Vector();      // Boolean per wrapped line
+    private final Vector names = new Vector();     // String nickname at the start of this wrapped line, or ""
+    private final Vector nameLens = new Vector();  // Integer chars of that line that are the nickname (incl. ": ")
     private int wrapW = -1;
     private int top;
     private boolean stick = true;
     private int dragY = -1;
     private final Font font = Font.getFont(Font.FACE_PROPORTIONAL, Font.STYLE_PLAIN, Font.SIZE_SMALL);
 
-    ChatView(String title, String me) {
+    ChatView(String title, Namer namer) {
         setTitle(title);
-        this.me = me + ": ";
+        this.namer = namer;
     }
+
+    /** Statuses changed: redraw the names. */
+    void refresh() { repaint(); }
 
     void setLines(Vector src) {
         lines.removeAllElements();
@@ -48,16 +55,21 @@ final class ChatView extends Canvas {
 
     private void rewrap(int w) {
         wrapped.removeAllElements();
-        mine.removeAllElements();
-        for (int i = 0; i < lines.size(); i++) {
-            String l = (String) lines.elementAt(i);
-            Boolean m = l.startsWith(me) ? Boolean.TRUE : Boolean.FALSE;
-            wrapLine(l, w, m);
-        }
+        names.removeAllElements();
+        nameLens.removeAllElements();
+        for (int i = 0; i < lines.size(); i++) wrapLine((String) lines.elementAt(i), w);
         wrapW = w;
     }
 
-    private void wrapLine(String s, int w, Boolean m) {
+    /** "user: text" -> "user", or "" if the line has no nickname. */
+    static String nameOf(String l) {
+        int c = l.indexOf(": ");
+        return c > 0 && c <= 40 ? l.substring(0, c) : "";
+    }
+
+    private void wrapLine(String s, int w) {
+        String name = nameOf(s);
+        int left = name.length() > 0 ? name.length() + 1 : 0; // nickname + ':' still to colour
         int start = 0;
         while (start < s.length()) {
             int end = start, lastSpace = -1;
@@ -67,11 +79,17 @@ final class ChatView extends Canvas {
             }
             if (end < s.length() && lastSpace > start) end = lastSpace + 1;
             if (end == start) end = start + 1; // one char wider than the screen: show it anyway
-            wrapped.addElement(s.substring(start, end).trim());
-            mine.addElement(m);
+            String seg = s.substring(start, end);
+            int lead = 0;
+            while (lead < seg.length() && seg.charAt(lead) == ' ' && start > 0) lead++;
+            wrapped.addElement(seg.substring(lead));
+            int n = Math.max(0, Math.min(left - lead, seg.length() - lead));
+            names.addElement(n > 0 ? name : "");
+            nameLens.addElement(new Integer(n));
+            left = Math.max(0, left - (end - start));
             start = end;
         }
-        if (s.length() == 0) { wrapped.addElement(""); mine.addElement(m); }
+        if (s.length() == 0) { wrapped.addElement(""); names.addElement(""); nameLens.addElement(new Integer(0)); }
     }
 
     private int lineH() { return font.getHeight() + 2; }
@@ -94,8 +112,21 @@ final class ChatView extends Canvas {
             return;
         }
         for (int i = top; i < wrapped.size() && y < h; i++) {
-            g.setColor(((Boolean) mine.elementAt(i)).booleanValue() ? 0x1d6fa5 : 0x000000);
-            g.drawString((String) wrapped.elementAt(i), 4, y, Graphics.TOP | Graphics.LEFT);
+            String t = (String) wrapped.elementAt(i);
+            int n = ((Integer) nameLens.elementAt(i)).intValue();
+            int x = 4;
+            if (n > 0) {
+                String nm = (String) names.elementAt(i);
+                g.setColor(namer == null ? 0x000000 : namer.color(nm));
+                Font bold = Font.getFont(font.getFace(), Font.STYLE_BOLD, font.getSize());
+                g.setFont(bold);
+                String head = t.substring(0, n);
+                g.drawString(head, x, y, Graphics.TOP | Graphics.LEFT);
+                x += bold.stringWidth(head);
+                g.setFont(font);
+            }
+            g.setColor(0x000000);
+            g.drawString(t.substring(n), x, y, Graphics.TOP | Graphics.LEFT);
             y += lh;
         }
         if (top > 0) { g.setColor(0x999999); g.fillTriangle(w - 9, 8, w - 3, 8, w - 6, 3); }

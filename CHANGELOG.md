@@ -9,6 +9,13 @@
   Pick any item for who likes it, similar things, or to search for it. Users' menus have Their interests
 - Private rooms: Chat rooms > Private creates one; private rooms you own or belong to show in the list;
   inside one: Invite, Members (owners can remove people) and Quit. You get a notice when someone adds you
+- Nicknames in chat rooms and messages are coloured (the message text stays black): your own name,
+  people online, people offline (in a room: people who've left it). Pick the colours under Colors in
+  any chat or message screen; they're remembered
+- Fixed: private rooms are joined with the private flag (from the room list and when rejoining after
+  a reconnect), so the server doesn't refuse them or treat them as new public rooms
+- Fixed: a queued download whose name isn't UTF-8 could lose its original name bytes in a long session
+  and then fail with "File not shared"
 - My downloads > Retry restarts the automatic retries from zero
 - No longer a beta: the About screen just says the version
 

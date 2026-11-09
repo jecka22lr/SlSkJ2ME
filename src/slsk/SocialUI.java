@@ -53,6 +53,11 @@ final class SocialUI implements CommandListener {
     private final Command cMembers = new Command("Members", Command.SCREEN, 6);
     private final Command cQuitPriv = new Command("Quit", "Leave private room for good", Command.SCREEN, 7);
     private List membersL;
+    private final Command cColors = new Command("Colors", "Name colors", Command.SCREEN, 8);
+    private final Command cColorsOk = new Command("OK", Command.OK, 1);
+    private javax.microedition.lcdui.Form colorsF;
+    private ChoiceGroup gOwn, gOnline, gOffline;
+    private Displayable colorsBack;
 
     // rooms
     private List roomsL, usersL;
@@ -162,12 +167,20 @@ final class SocialUI implements CommandListener {
     private void openRoom(Room r) {
         curRoom = r;
         r.unread = 0;
-        roomF = new ChatView(r.name, c().username);
+        final Room room = r;
+        roomF = new ChatView(r.name, new ChatView.Namer() {
+            public int color(String n) {
+                if (n.equals(c().username)) return ChatColors.VALUES[ChatColors.own];
+                // in a room, being in its user list means online
+                return ChatColors.VALUES[room.users.contains(n) ? ChatColors.online : ChatColors.offline];
+            }
+        });
         roomF.setLines(r.lines);
         roomF.addCommand(cSay);
         roomF.addCommand(cUsers);
         roomF.addCommand(cLeave);
         roomF.addCommand(cSearchRoom);
+        roomF.addCommand(cColors);
         if (c().isPrivate(r.name) || r.members != null) {
             roomF.addCommand(cAddMember);
             roomF.addCommand(cMembers);
@@ -176,6 +189,25 @@ final class SocialUI implements CommandListener {
         roomF.addCommand(cBack);
         roomF.setCommandListener(this);
         d.setCurrent(roomF);
+    }
+
+    private void showColors(Displayable back) {
+        colorsBack = back;
+        colorsF = new javax.microedition.lcdui.Form("Name colors");
+        gOwn = new ChoiceGroup("Your name", ChoiceGroup.POPUP, ChatColors.NAMES, null);
+        gOnline = new ChoiceGroup("Others, online", ChoiceGroup.POPUP, ChatColors.NAMES, null);
+        gOffline = new ChoiceGroup("Others, offline", ChoiceGroup.POPUP, ChatColors.NAMES, null);
+        gOwn.setSelectedIndex(ChatColors.own, true);
+        gOnline.setSelectedIndex(ChatColors.online, true);
+        gOffline.setSelectedIndex(ChatColors.offline, true);
+        colorsF.append(gOwn);
+        colorsF.append(gOnline);
+        colorsF.append(gOffline);
+        colorsF.append(new StringItem(null, "Only the names are coloured, messages stay black. In rooms, offline means they've left the room."));
+        colorsF.addCommand(cColorsOk);
+        colorsF.addCommand(cBack);
+        colorsF.setCommandListener(this);
+        d.setCurrent(colorsF);
     }
 
     private void showMembers() {
@@ -216,10 +248,20 @@ final class SocialUI implements CommandListener {
     void openConvo(Convo cv) {
         curConvo = cv;
         cv.unread = 0;
-        convoF = new ChatView(cv.user, c().username);
+        convoF = new ChatView(cv.user, new ChatView.Namer() {
+            public int color(String n) {
+                Client cl = c();
+                if (n.equals(cl.username)) return ChatColors.VALUES[ChatColors.own];
+                UserInfo i = (UserInfo) cl.users.get(n);
+                // unknown yet: assume online; the status request below corrects it within a second
+                return ChatColors.VALUES[i != null && i.status == 0 ? ChatColors.offline : ChatColors.online];
+            }
+        });
+        c().getUserStatus(cv.user);
         convoF.setLines(cv.lines);
         convoF.addCommand(cSay);
         convoF.addCommand(cProfile);
+        convoF.addCommand(cColors);
         convoF.addCommand(cBack);
         convoF.setCommandListener(this);
         d.setCurrent(convoF);
@@ -654,6 +696,7 @@ final class SocialUI implements CommandListener {
             else if (r != null && b == null && cur == roomsL && roomsL != null) { fillRooms(); openRoom(r); }
             else if (cur == roomsL) fillRooms();
             if (r != null && r == curRoom && "left".equals(b) && cur == roomF) showRooms();
+            else if (r != null && r == curRoom && cur == roomF) roomF.refresh();
             break;
         }
         case Client.EV_ROOMMSG: {
@@ -678,6 +721,7 @@ final class SocialUI implements CommandListener {
         case Client.EV_USERINFO: {
             UserInfo i = (UserInfo) a;
             if (profileF != null && cur == profileF && i.user.equals(curUser)) fillProfile(i);
+            if (cur == convoF && convoF != null && curConvo != null && i.user.equals(curConvo.user)) convoF.refresh();
             if (cur == buddiesL && buddiesL != null) {
                 int k = c().buddies.indexOf(i.user);
                 if (k >= 0 && k < buddiesL.size()) buddiesL.set(k, buddyLabel(i.user), null);
@@ -775,6 +819,19 @@ final class SocialUI implements CommandListener {
                 if (r != null) openRoom(r);
                 else { cl.joinRoom(name); roomsL.setTitle("Joining " + name + "..."); }
             }
+        } else if (s == colorsF) {
+            if (c == cColorsOk) {
+                ChatColors.own = gOwn.getSelectedIndex();
+                ChatColors.online = gOnline.getSelectedIndex();
+                ChatColors.offline = gOffline.getSelectedIndex();
+                ChatColors.save();
+            }
+            if (colorsBack instanceof ChatView) ((ChatView) colorsBack).refresh();
+            d.setCurrent(colorsBack != null ? colorsBack : m.main());
+        } else if (s == roomF && c == cColors) {
+            showColors(roomF);
+        } else if (s == convoF && c == cColors) {
+            showColors(convoF);
         } else if (s == roomF) {
             if (c == cBack) showRooms();
             else if (c == cSay) input("Say in " + curRoom.name, "", 1, roomF);

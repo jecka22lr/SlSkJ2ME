@@ -739,6 +739,9 @@ public final class Client implements Runnable {
 
     public void getUserInterests(String user) { trySend(57, new Msg().str(user)); }
 
+    /** Online/away/offline arrives as EV_USERINFO. */
+    public void getUserStatus(String user) { trySend(7, new Msg().str(user)); }
+
     // ================================================================ private rooms
 
     public boolean isPrivate(String room) {
@@ -764,7 +767,8 @@ public final class Client implements Runnable {
 
     public void requestRoomList() { trySend(64, new Msg()); }
 
-    public void joinRoom(String room) { trySend(14, new Msg().str(room).u32(0)); }
+    /** Private rooms must be joined with the private flag, or the server treats it as a new public room. */
+    public void joinRoom(String room) { trySend(14, new Msg().str(room).u32(isPrivate(room) ? 1 : 0)); }
 
     public void leaveRoom(String room) { trySend(15, new Msg().str(room)); }
 
@@ -1508,6 +1512,7 @@ public final class Client implements Runnable {
     /** (Re)send QueueUpload. Also used for Retry. */
     public void queue(final Transfer t) {
         if (t.state == Transfer.DONE || t.active()) return;
+        if (t.raw != null) Util.rememberRaw(t.file, t.raw); // the name cache may have been cleared since
         t.state = Transfer.CONNECTING;
         t.cancelled = false;
         t.info = "";

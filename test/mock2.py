@@ -51,6 +51,8 @@ def server(c):
                 c.sendall(frame(102, struct.pack('<I', 1) + s('parent') + LO + struct.pack('<I', PARENT)))
         elif code == 14:
             room, o = rstr(p, 0)
+            if room == 'friends':
+                ok('priv_join_flag', len(p) >= o + 4 and struct.unpack_from('<I', p, o)[0] == 1)
             if room == 'secret':
                 ok('priv_create', len(p) >= o + 4 and struct.unpack_from('<I', p, o)[0] == 1)
                 c.sendall(frame(14, s(room) + struct.pack('<I', 1) + s('jecka')))
@@ -203,7 +205,7 @@ def accept_loop():
         cc = ls.accept()[0]
         threading.Thread(target=server, args=(cc,), daemon=True).start()
 threading.Thread(target=accept_loop, daemon=True).start()
-need = ['like_sent','priv_invites_on','priv_create','priv_invite','watch_buddy','room_search','buddy_search','ban_denies_download','ban_empty_browse','reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
+need = ['priv_join_flag','like_sent','priv_invites_on','priv_create','priv_invite','watch_buddy','room_search','buddy_search','ban_denies_download','ban_empty_browse','reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
 t0 = time.time()
 while time.time() - t0 < float(sys.argv[1]) and not all(k in checks for k in need): time.sleep(0.2)
 missing = [k for k in need if k not in checks]

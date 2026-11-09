@@ -80,6 +80,7 @@ public class E2E2 implements Client.Listener {
     waitFor(() -> c.rooms.get("secret") != null && ((Room) c.rooms.get("secret")).members != null, "private room created");
     c.requestRoomList();
     waitFor(() -> c.privRooms.length == 2 && c.ownedRooms.contains("secret") && c.isPrivate("friends"), "private rooms in room list");
+    c.joinRoom("friends"); // a private room from the list: must go out with the private flag
     c.privateRoomAdd("secret", "peer1");
     waitFor(() -> ui.privMsg != null && ui.privMsg.indexOf("friends") >= 0, "added-to-room notice");
     c.roomSearch("nokia", "tape");
