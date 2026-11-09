@@ -6,6 +6,8 @@ no proxy server, talks to the real Soulseek network directly.
 Aimed at Nokia S60v3/v5 (N82, C6-00...), Nokia S40 with JSR-75, and Windows Mobile 6 Java runtimes.
 The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see about that later.
 
+Works on my Nokia C6-00. Your mileage may vary.
+
 ## Features
 
 - Log in to `server.slsknet.org:2242` (unknown names are registered on first login like usual)
