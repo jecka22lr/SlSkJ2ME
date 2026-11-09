@@ -45,6 +45,9 @@ final class SocialUI implements CommandListener {
     private final Command cRescan = new Command("Rescan", "Rescan shares", Command.SCREEN, 2);
     private final Command cClear = new Command("Clear", "Clear finished", Command.SCREEN, 4);
     private final Command cPick = new Command("Pick folder", "Pick shared folder", Command.SCREEN, 2);
+    private final Command cSearchRoom = new Command("Search", "Search this room", Command.SCREEN, 4);
+    private final Command cSearchBuddies = new Command("Search", "Search buddies' files", Command.SCREEN, 3);
+    private final Command cBlocked = new Command("Blocked", "Ignored & banned", Command.SCREEN, 4);
 
     // rooms
     private List roomsL, usersL;
@@ -76,11 +79,15 @@ final class SocialUI implements CommandListener {
     private TextField fDesc, fShare, fSlots;
     private ChoiceGroup fStatus, fSharing;
     private StringItem shareInfo;
+    // buddies & blocked
+    private List buddiesL, blockedL;
+    private final Vector blockedRows = new Vector(); // String[]{"i"|"b", name}
+    private TextField fUpLimit, fDownLimit, fPerUser;
     // uploads
     private List upL;
     private final Vector upRows = new Vector();
 
-    String description = "", shareDir = "", slots = "1";
+    String description = "", shareDir = "", slots = "1", upLimit = "0", downLimit = "0", perUser = "50";
     boolean sharing;
 
     SocialUI(SlskMIDlet m, Display d) { this.m = m; this.d = d; }
@@ -149,6 +156,7 @@ final class SocialUI implements CommandListener {
         roomF.addCommand(cSay);
         roomF.addCommand(cUsers);
         roomF.addCommand(cLeave);
+        roomF.addCommand(cSearchRoom);
         roomF.addCommand(cBack);
         roomF.setCommandListener(this);
         d.setCurrent(roomF);
@@ -209,9 +217,117 @@ final class SocialUI implements CommandListener {
         userL.append("Browse files", null);
         userL.append("Search their files", null);
         userL.append("Send message", null);
+        Client cl = c();
+        userL.append(cl.isBuddy(user) ? "Remove from buddies" : "Add to buddies", null);
+        userL.append(cl.ignored.contains(user) ? "Stop ignoring" : "Ignore (hide chat & messages)", null);
+        userL.append(cl.banned.contains(user) ? "Unban" : "Ban (no browsing or downloads)", null);
         userL.addCommand(cBack);
         userL.setCommandListener(this);
         d.setCurrent(userL);
+    }
+
+    /** Rebuild the user menu (labels changed) and keep the cursor where it was. */
+    private void showUserKeep(int row) {
+        Displayable back = userBack;
+        showUser(curUser, back);
+        if (row < userL.size()) userL.setSelectedIndex(row, true);
+    }
+
+    // ================================================================ buddies, ignored, banned
+
+    void showBuddies() {
+        Client cl = c();
+        buddiesL = new List("Buddies", List.IMPLICIT);
+        for (int i = 0; i < cl.buddies.size(); i++) buddiesL.append(buddyLabel((String) cl.buddies.elementAt(i)), null);
+        if (cl.buddies.size() == 0) buddiesL.append("(none: Add, or pick Add to buddies on someone)", null);
+        buddiesL.addCommand(cAdd);
+        buddiesL.addCommand(cRemove);
+        buddiesL.addCommand(cSearchBuddies);
+        buddiesL.addCommand(cBlocked);
+        buddiesL.addCommand(cBack);
+        buddiesL.setCommandListener(this);
+        d.setCurrent(buddiesL);
+    }
+
+    private String buddyLabel(String u) {
+        UserInfo i = (UserInfo) c().users.get(u);
+        int st = i == null ? -1 : i.status;
+        return u + "  " + (st == 2 ? "online" : st == 1 ? "away" : st == 0 ? "offline" : "...");
+    }
+
+    int buddiesOnline() {
+        Client cl = c();
+        int n = 0;
+        for (int i = 0; i < cl.buddies.size(); i++) {
+            UserInfo u = (UserInfo) cl.users.get(cl.buddies.elementAt(i));
+            if (u != null && u.status > 0) n++;
+        }
+        return n;
+    }
+
+    private void showBlocked() {
+        Client cl = c();
+        blockedL = new List("Ignored & banned", List.IMPLICIT);
+        blockedRows.removeAllElements();
+        for (int i = 0; i < cl.banned.size(); i++) {
+            String u = (String) cl.banned.elementAt(i);
+            blockedL.append("[banned] " + u, null);
+            blockedRows.addElement(new String[] { "b", u });
+        }
+        for (int i = 0; i < cl.ignored.size(); i++) {
+            String u = (String) cl.ignored.elementAt(i);
+            blockedL.append("[ignored] " + u, null);
+            blockedRows.addElement(new String[] { "i", u });
+        }
+        if (blockedRows.size() == 0) blockedL.append("(nobody)", null);
+        blockedL.addCommand(cRemove);
+        blockedL.addCommand(cBack);
+        blockedL.setCommandListener(this);
+        d.setCurrent(blockedL);
+    }
+
+    void loadPeople(Client cl) {
+        Vector v = new Vector();
+        SlskMIDlet.loadStrings("slskme-ppl", v);
+        for (int i = 0; i < v.size(); i++) {
+            String e = (String) v.elementAt(i);
+            if (e.length() < 2) continue;
+            String u = e.substring(1);
+            char k = e.charAt(0);
+            if (k == 'f') cl.buddies.addElement(u);
+            else if (k == 'i') cl.ignored.addElement(u);
+            else if (k == 'b') cl.banned.addElement(u);
+        }
+    }
+
+    private void savePeople(Client cl) {
+        Vector v = new Vector();
+        for (int i = 0; i < cl.buddies.size(); i++) v.addElement("f" + cl.buddies.elementAt(i));
+        for (int i = 0; i < cl.ignored.size(); i++) v.addElement("i" + cl.ignored.elementAt(i));
+        for (int i = 0; i < cl.banned.size(); i++) v.addElement("b" + cl.banned.elementAt(i));
+        SlskMIDlet.saveStrings("slskme-ppl", v);
+    }
+
+    private static void saveShareCache(Client cl) {
+        try {
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            cl.saveShareCache(new DataOutputStream(bo));
+            byte[] b = bo.toByteArray();
+            RecordStore rs = RecordStore.openRecordStore("slskme-shares", true);
+            if (rs.getNumRecords() > 0) rs.setRecord(1, b, 0, b.length);
+            else rs.addRecord(b, 0, b.length);
+            rs.closeRecordStore();
+        } catch (Throwable e) {}
+    }
+
+    void applyLimits(Client cl) {
+        cl.upLimit.kbps = parseInt(upLimit, 0);
+        cl.downLimit.kbps = parseInt(downLimit, 0);
+        cl.maxPerUser = Math.max(1, parseInt(perUser, 50));
+    }
+
+    private static int parseInt(String s, int def) {
+        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return def; }
     }
 
     private void showProfile() {
@@ -350,6 +466,9 @@ final class SocialUI implements CommandListener {
         fSharing.setSelectedIndex(sharing ? 0 : 1, true);
         fShare = new TextField("Shared folder", shareDir, 200, TextField.URL);
         fSlots = new TextField("Upload slots", slots, 1, TextField.NUMERIC);
+        fPerUser = new TextField("Max files per person", perUser, 4, TextField.NUMERIC);
+        fUpLimit = new TextField("Upload limit KB/s (0 = none)", upLimit, 5, TextField.NUMERIC);
+        fDownLimit = new TextField("Download limit KB/s (0 = none)", downLimit, 5, TextField.NUMERIC);
         shareInfo = new StringItem("Now sharing", !sharing ? "not sharing"
             : c().sharedFiles() + " files in " + c().sharedDirs() + " folders");
         myF.append(fDesc);
@@ -357,6 +476,9 @@ final class SocialUI implements CommandListener {
         myF.append(fSharing);
         myF.append(fShare);
         myF.append(fSlots);
+        myF.append(fPerUser);
+        myF.append(fUpLimit);
+        myF.append(fDownLimit);
         myF.append(shareInfo);
         myF.addCommand(cSave);
         myF.addCommand(cPick);
@@ -374,7 +496,11 @@ final class SocialUI implements CommandListener {
         shareDir = fShare.getString().trim();
         if (shareDir.length() > 0 && !shareDir.endsWith("/")) shareDir += "/";
         slots = fSlots.getString().trim();
+        perUser = fPerUser.getString().trim();
+        upLimit = fUpLimit.getString().trim();
+        downLimit = fDownLimit.getString().trim();
         Client cl = c();
+        applyLimits(cl);
         cl.description = description;
         try { cl.uploadSlots = Math.max(1, Math.min(4, Integer.parseInt(slots))); } catch (Exception e) {}
         cl.setAway(fStatus.getSelectedIndex() == 1);
@@ -386,7 +512,7 @@ final class SocialUI implements CommandListener {
             m.alert("Sharing", "Pick a folder to share first", myF);
             return;
         } else if (rescan || !wasSharing || !shareDir.equals(oldDir)) {
-            startScan();
+            scan(true);
             // stay here so the scan result shows up under "Now sharing"
             m.alert("Sharing", "Saved. Scanning " + Util.decodeUrl(shareDir) + "...", myF);
             return;
@@ -394,20 +520,41 @@ final class SocialUI implements CommandListener {
         m.alert("Profile", "Saved", m.main());
     }
 
-    /** Called after login too. */
-    void startScan() {
+    /** After login: use the saved scan if it's for this folder, else scan. */
+    void startScan() { scan(false); }
+
+    private void scan(final boolean force) {
         final Client cl = c();
         if (!sharing || shareDir.length() == 0 || cl == null) return;
         if (shareInfo != null) shareInfo.setText("scanning...");
         new Thread(new Runnable() {
             public void run() {
                 String msg;
+                if (!force) {
+                    try {
+                        byte[] b = null;
+                        RecordStore rs = RecordStore.openRecordStore("slskme-shares", true);
+                        if (rs.getNumRecords() > 0) b = rs.getRecord(1);
+                        rs.closeRecordStore();
+                        int n = b == null ? -1 : cl.loadShareCache(new DataInputStream(new ByteArrayInputStream(b)), shareDir);
+                        if (n >= 0) {
+                            msg = "Sharing " + n + " files (saved scan; Rescan to refresh)";
+                            m.log(msg);
+                            final String fm = msg;
+                            d.callSerially(new Runnable() {
+                                public void run() { if (shareInfo != null) shareInfo.setText(fm); }
+                            });
+                            return;
+                        }
+                    } catch (Throwable e) {}
+                }
                 try {
                     int n = cl.scanShares(shareDir);
                     msg = n == 0 ? "Nothing to share: no readable files in " + Util.decodeUrl(shareDir)
                         : "Sharing " + n + (n == 1 ? " file in " : " files in ") + cl.sharedDirs() + (cl.sharedDirs() == 1 ? " folder" : " folders");
                     String p = cl.scanProblems();
                     if (p != null) msg += "\n" + p;
+                    saveShareCache(cl);
                 } catch (Throwable e) {
                     msg = "Share scan failed: " + e.getMessage();
                 }
@@ -504,6 +651,15 @@ final class SocialUI implements CommandListener {
         case Client.EV_USERINFO: {
             UserInfo i = (UserInfo) a;
             if (profileF != null && cur == profileF && i.user.equals(curUser)) fillProfile(i);
+            if (cur == buddiesL && buddiesL != null) {
+                int k = c().buddies.indexOf(i.user);
+                if (k >= 0 && k < buddiesL.size()) buddiesL.set(k, buddyLabel(i.user), null);
+            }
+            break;
+        }
+        case Client.EV_BUDDY: {
+            UserInfo i = (UserInfo) a;
+            m.notifyUser(i.user + (i.status == 0 ? " went offline" : " is online"));
             break;
         }
         case Client.EV_BROWSE:
@@ -513,6 +669,13 @@ final class SocialUI implements CommandListener {
             break;
         case Client.EV_WISH:
             m.notifyUser("Wishlist hit for \"" + b + "\": " + Util.baseName(((Result) a).file));
+            break;
+        case Client.EV_SHARES:
+            // a finished download got added to the shares; keep the saved scan current (off the UI thread)
+            if (b == null) {
+                final Client cl = c();
+                new Thread(new Runnable() { public void run() { saveShareCache(cl); } }).start();
+            }
             break;
         case Client.EV_UPLOAD:
             if (showingUploads()) refreshUploads();
@@ -545,6 +708,9 @@ final class SocialUI implements CommandListener {
                 cl.joinRoom(t);
                 inputTB.setTitle("Joining " + t + "...");
                 break;
+            case 8: cl.addBuddy(t); savePeople(cl); showBuddies(); break;
+            case 9: cl.roomSearch(curRoom.name, t); m.showResults("Room " + curRoom.name + ": " + t); break;
+            case 10: cl.buddySearch(t); m.showResults("Buddies: " + t); break;
             case 7:
                 if (!cl.wishlist.contains(t)) cl.wishlist.addElement(t);
                 saveWishlist();
@@ -572,10 +738,31 @@ final class SocialUI implements CommandListener {
             else if (c == cSay) input("Say in " + curRoom.name, "", 1, roomF);
             else if (c == cUsers) showRoomUsers();
             else if (c == cLeave) { cl.leaveRoom(curRoom.name); cl.rooms.remove(curRoom.name); showRooms(); }
+            else if (c == cSearchRoom) input("Search " + curRoom.name, "", 9, roomF);
         } else if (s == usersL) {
             if (c == cBack) d.setCurrent(roomF);
             else if (c == List.SELECT_COMMAND && usersL.getSelectedIndex() >= 0)
                 showUser(usersL.getString(usersL.getSelectedIndex()), usersL);
+        } else if (s == buddiesL) {
+            int i = buddiesL.getSelectedIndex();
+            String u = i >= 0 && i < cl.buddies.size() ? (String) cl.buddies.elementAt(i) : null;
+            if (c == cBack) m.showMain();
+            else if (c == cAdd) input("Add buddy (username)", "", 8, buddiesL);
+            else if (c == cRemove && u != null) { cl.removeBuddy(u); savePeople(cl); showBuddies(); }
+            else if (c == cSearchBuddies) {
+                if (cl.buddies.size() == 0) m.alert("Buddies", "Add some buddies first", buddiesL);
+                else input("Search buddies' files", "", 10, buddiesL);
+            } else if (c == cBlocked) showBlocked();
+            else if (c == List.SELECT_COMMAND && u != null) showUser(u, buddiesL);
+        } else if (s == blockedL) {
+            int i = blockedL.getSelectedIndex();
+            String[] row = i >= 0 && i < blockedRows.size() ? (String[]) blockedRows.elementAt(i) : null;
+            if (c == cBack) showBuddies();
+            else if (row != null && c == cRemove) {
+                if (row[0].equals("b")) cl.setBanned(row[1], false); else cl.setIgnored(row[1], false);
+                savePeople(cl);
+                showBlocked();
+            }
         } else if (s == convosL) {
             if (c == cBack) m.showMain();
             else if (c == cNewPm) input("Message to (username)", "", 3, convosL);
@@ -595,6 +782,22 @@ final class SocialUI implements CommandListener {
                 case 1: startBrowse(); break;
                 case 2: input("Search " + curUser + "'s files", "", 5, userL); break;
                 case 3: openConvo(cl.convo(curUser)); break;
+                case 4:
+                    if (cl.isBuddy(curUser)) cl.removeBuddy(curUser); else cl.addBuddy(curUser);
+                    savePeople(cl);
+                    m.alert("Buddies", cl.isBuddy(curUser) ? curUser + " added to buddies" : curUser + " removed from buddies", userL);
+                    showUserKeep(4);
+                    break;
+                case 5:
+                    cl.setIgnored(curUser, !cl.ignored.contains(curUser));
+                    savePeople(cl);
+                    showUserKeep(5);
+                    break;
+                case 6:
+                    cl.setBanned(curUser, !cl.banned.contains(curUser));
+                    savePeople(cl);
+                    showUserKeep(6);
+                    break;
                 }
             }
         } else if (s == profileF) {
@@ -614,7 +817,8 @@ final class SocialUI implements CommandListener {
                 cl.download(r);
                 ((List) s).set(i, m.resultLabel(r), null);
             } else if (c == cGetAll && arr != null) {
-                for (int k = 0; k < arr.length; k++) cl.download(arr[k]);
+                String sub = Util.baseName(filesL.getTitle());
+                for (int k = 0; k < arr.length; k++) cl.downloadInto(arr[k], sub);
                 for (int k = 0; k < arr.length; k++) filesL.set(k, m.resultLabel(arr[k]), null);
                 m.alert("Download whole folder", "Queued " + arr.length + " files", filesL);
             } else if (c == cInfo && r != null) m.showInfo("File", r.details(), s);

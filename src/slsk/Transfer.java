@@ -15,6 +15,13 @@ public final class Transfer {
     volatile int token = -1;
     volatile long startTime, startBytes;
     volatile boolean cancelled;
+    /** Auto-retry bookkeeping (see Client.retryFailed). */
+    volatile long failedAt;
+    volatile int retries;
+    /** Subfolder of the save location (whole-folder downloads), or null. */
+    volatile String subdir;
+    /** file:// URL of the saved (or partial) file, once known. */
+    volatile String path;
     private final StringBuffer trace = new StringBuffer();
 
     synchronized void step(String s) {

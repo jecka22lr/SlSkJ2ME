@@ -244,6 +244,7 @@ final class PeerConn implements Runnable {
                 if (r < 0) throw new IOException("file shorter than shared size");
                 out.write(buf, 0, r);
                 u.done += r;
+                c.upLimit.took(r);
                 long now = System.currentTimeMillis();
                 if (now - lastUi > 700) { lastUi = now; c.uploadChanged(u); }
             }
@@ -274,6 +275,7 @@ final class PeerConn implements Runnable {
         try {
             sink = Store.open(c.downloadDir, t);
             t.step("File open: " + sink.where);
+            t.path = sink.url;
             long offset = sink.offset;
             if (offset > t.size) { offset = 0; sink.truncate(); }
             t.done = offset;
@@ -293,12 +295,15 @@ final class PeerConn implements Runnable {
                 if (r < 0) throw new IOException("connection lost");
                 sink.write(buf, 0, r);
                 t.done += r;
+                c.downLimit.took(r);
                 long now = System.currentTimeMillis();
                 if (now - lastUi > 700) { lastUi = now; c.changed(t); }
             }
-            String savedUrl = sink.url;
-            sink.close();
+            String savedUrl = sink.finish();
             sink = null;
+            t.path = savedUrl;
+            if (!savedUrl.endsWith(Util.urlEscape(Util.safeName(Util.baseName(t.file)))))
+                t.step("Name was taken, saved as " + Util.decodeUrl(Util.baseName(savedUrl)));
             t.state = Transfer.DONE;
             c.downloadSaved(savedUrl, t.size);
             t.info = "Saved";

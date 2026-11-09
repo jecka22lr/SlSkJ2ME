@@ -25,7 +25,7 @@ public final class Client implements Runnable {
     }
 
     public static final int EV_ROOMLIST = 1, EV_ROOM = 2, EV_ROOMMSG = 3, EV_PM = 4, EV_USERINFO = 5,
-        EV_BROWSE = 6, EV_WISH = 7, EV_SHARES = 8, EV_UPLOAD = 9, EV_CONN = 10;
+        EV_BROWSE = 6, EV_WISH = 7, EV_SHARES = 8, EV_UPLOAD = 9, EV_CONN = 10, EV_BUDDY = 11;
 
     static final int VERSION = 160, MINOR = 1;
 
@@ -45,7 +45,13 @@ public final class Client implements Runnable {
     public volatile String description = "";
     public volatile boolean away;
     public int uploadSlots = 1;
+    /** Most files one person can have queued or uploading from us at once. */
+    public int maxPerUser = 50;
+    final Throttle upLimit = new Throttle(), downLimit = new Throttle();
     final Shares shares = new Shares();
+
+    // people
+    public final Vector buddies = new Vector(), ignored = new Vector(), banned = new Vector();
     private int uploadedTotal;
 
     private final Listener ui;
@@ -211,22 +217,27 @@ public final class Client implements Runnable {
         case 5: { // WatchUser
             String u = r.str();
             UserInfo i = info(u);
+            int before = i.status;
             if (r.bool()) {
                 i.status = r.u32(); i.speed = r.u32(); r.u64(); i.files = r.u32(); i.dirs = r.u32();
             } else i.status = 0;
+            statusChanged(i, before);
             ui.event(EV_USERINFO, i, null);
             break;
         }
         case 7: { // GetUserStatus
             String u = r.str();
-            info(u).status = r.u32();
-            ui.event(EV_USERINFO, info(u), null);
+            UserInfo i = info(u);
+            int before = i.status;
+            i.status = r.u32();
+            statusChanged(i, before);
+            ui.event(EV_USERINFO, i, null);
             break;
         }
         case 13: { // SayChatroom
             String room = r.str(), u = r.str(), msg = r.str();
             Room rm = (Room) rooms.get(room);
-            if (rm != null) {
+            if (rm != null && !ignored.contains(u)) {
                 String line = u + ": " + msg;
                 rm.add(line);
                 ui.event(EV_ROOMMSG, rm, line);
@@ -280,6 +291,7 @@ public final class Client implements Runnable {
             r.u32(); // timestamp
             String u = r.str(), msg = r.str();
             trySend(23, new Msg().u32(id)); // MessageAcked
+            if (ignored.contains(u)) break;
             Convo c = convo(u);
             c.add(u + ": " + msg, true);
             ui.event(EV_PM, c, msg);
@@ -381,6 +393,7 @@ public final class Client implements Runnable {
         }
         trySend(28, new Msg().u32(away ? 1 : 2));                  // SetStatus
         sendShareCounts();
+        for (int i = 0; i < buddies.size(); i++) trySend(5, new Msg().str((String) buddies.elementAt(i))); // WatchUser
         trySend(71, new Msg().bool(true));                          // HaveNoParent
         trySend(100, new Msg().bool(false));                        // AcceptChildren: no
         new Thread(new Runnable() {
@@ -397,6 +410,7 @@ public final class Client implements Runnable {
                     try { Thread.sleep(10000); } catch (InterruptedException e) {}
                     reapIdlePeers();
                     checkUploads();
+                    retryFailed();
                 }
             }
         }).start();
@@ -463,6 +477,27 @@ public final class Client implements Runnable {
         capPerUser = false; // one user's files: no point capping
         trySend(42, new Msg().str(user).u32(searchToken).str(query));
         log("Searching " + user + "'s files: " + query);
+    }
+
+    /** Search one chat room's members. */
+    public void roomSearch(String room, String query) {
+        searchToken = rnd.nextInt() & 0x7fffffff;
+        results.removeAllElements();
+        perUser.clear();
+        capPerUser = true;
+        trySend(120, new Msg().str(room).u32(searchToken).str(query));
+        log("Searching room " + room + ": " + query);
+    }
+
+    /** Search all buddies' shares (one UserSearch each, same token). */
+    public void buddySearch(String query) {
+        searchToken = rnd.nextInt() & 0x7fffffff;
+        results.removeAllElements();
+        perUser.clear();
+        capPerUser = false;
+        for (int i = 0; i < buddies.size(); i++)
+            trySend(42, new Msg().str((String) buddies.elementAt(i)).u32(searchToken).str(query));
+        log("Searching " + buddies.size() + " buddies: " + query);
     }
 
     private void onSearchResponse(PeerConn p, Rd r0) throws IOException {
@@ -551,6 +586,44 @@ public final class Client implements Runnable {
         trySend(103, new Msg().u32(tok).str(q));
     }
 
+    // ================================================================ buddies, ignore, ban
+
+    public void addBuddy(String u) {
+        if (!buddies.contains(u)) buddies.addElement(u);
+        if (online) trySend(5, new Msg().str(u));
+    }
+
+    public void removeBuddy(String u) {
+        buddies.removeElement(u);
+        if (online) trySend(6, new Msg().str(u)); // UnwatchUser
+    }
+
+    public boolean isBuddy(String u) { return buddies.contains(u); }
+
+    public void setIgnored(String u, boolean on) {
+        if (on) { if (!ignored.contains(u)) ignored.addElement(u); } else ignored.removeElement(u);
+    }
+
+    /** Banned users can't browse us, download from us or get search results from us. */
+    public void setBanned(String u, boolean on) {
+        if (on) {
+            if (!banned.contains(u)) banned.addElement(u);
+            Vector v = new Vector();
+            synchronized (uploads) {
+                for (int i = 0; i < uploads.size(); i++) {
+                    Upload x = (Upload) uploads.elementAt(i);
+                    if (x.user.equals(u) && !x.finished()) v.addElement(x);
+                }
+            }
+            for (int i = 0; i < v.size(); i++) uploadFailed((Upload) v.elementAt(i), "Banned", true);
+        } else banned.removeElement(u);
+    }
+
+    private void statusChanged(UserInfo i, int before) {
+        if (!buddies.contains(i.user) || before < 0 || before == i.status) return;
+        if ((before == 0) != (i.status == 0)) ui.event(EV_BUDDY, i, null); // came online or went offline
+    }
+
     // ================================================================ chat & users
 
     public void requestRoomList() { trySend(64, new Msg()); }
@@ -610,7 +683,7 @@ public final class Client implements Runnable {
         int n = shares.scan(dir);
         shares.enabled = n > 0;
         sendShareCounts();
-        ui.event(EV_SHARES, new Integer(n), null);
+        ui.event(EV_SHARES, new Integer(n), "scan");
         return n;
     }
 
@@ -633,6 +706,18 @@ public final class Client implements Runnable {
         sendShareCounts();
     }
 
+    /** Use a saved scan instead of rescanning. Returns the file count, or -1 if the cache doesn't match dir. */
+    public int loadShareCache(java.io.DataInputStream in, String dir) throws IOException {
+        int n = shares.readCache(in, dir);
+        if (n < 0) return -1;
+        shares.wanted = true;
+        shares.enabled = n > 0;
+        sendShareCounts();
+        return n;
+    }
+
+    public void saveShareCache(java.io.DataOutputStream out) throws IOException { shares.writeCache(out); }
+
     public int sharedFiles() { return shares.enabled ? shares.files() : 0; }
 
     public int sharedDirs() { return shares.enabled ? shares.dirs() : 0; }
@@ -643,7 +728,7 @@ public final class Client implements Runnable {
 
     /** Someone searched (distributed network or user search); answer if we have matches. */
     private void searchRequest(String user, int token, String query, PeerConn direct) {
-        if (!shares.enabled || user.equals(username)) return;
+        if (!shares.enabled || user.equals(username) || banned.contains(user)) return;
         Vector hits = shares.match(query, 50);
         if (hits.size() == 0) return;
         final byte[] payload = Shares.searchResponse(username, token, hits, freeSlot(), 0, queuedUploads());
@@ -774,24 +859,59 @@ public final class Client implements Runnable {
         return null;
     }
 
+    private boolean activeUploadTo(String user) {
+        for (int i = 0; i < uploads.size(); i++) {
+            Upload x = (Upload) uploads.elementAt(i);
+            if (x.user.equals(user) && x.active()) return true;
+        }
+        return false;
+    }
+
+    /** Place in our upload queue, counting buddies (who go first) ahead of everyone else. */
     private int placeOf(Upload u) {
         int n = 0;
+        boolean buddy = buddies.contains(u.user);
         synchronized (uploads) {
-            for (int i = 0; i < uploads.size(); i++) {
-                Upload x = (Upload) uploads.elementAt(i);
-                if (x.state == Upload.QUEUED) { n++; if (x == u) return n; }
+            for (int pass = 0; pass < 2; pass++) {
+                for (int i = 0; i < uploads.size(); i++) {
+                    Upload x = (Upload) uploads.elementAt(i);
+                    if (x.state != Upload.QUEUED || buddies.contains(x.user) != (pass == 0)) continue;
+                    n++;
+                    if (x == u) return n;
+                }
+                if (buddy) break;
             }
         }
         return 0;
     }
 
+    private int uploadsOf(String user) {
+        int n = 0;
+        synchronized (uploads) {
+            for (int i = 0; i < uploads.size(); i++) {
+                Upload x = (Upload) uploads.elementAt(i);
+                if (x.user.equals(user) && !x.finished()) n++;
+            }
+        }
+        return n;
+    }
+
     private void queueUpload(PeerConn p, String file) throws IOException {
+        if (banned.contains(p.user)) {
+            p.send(new Msg().str(file).str("Banned").frame(50));
+            return;
+        }
         Shares.Entry e = shares.enabled ? shares.find(file) : null;
         if (e == null) {
             p.send(new Msg().str(file).str("File not shared.").frame(50));
             return;
         }
         if (uploadFor(p.user, file) != null) return;
+        if (uploadsOf(p.user) >= maxPerUser) {
+            p.send(new Msg().str(file).str("Too many files").frame(50));
+            log("Refused " + p.user + ": already " + maxPerUser + " files queued");
+            return;
+        }
         Upload u = new Upload(p.user, e);
         u.step("Queued: " + p.user + " asked for it");
         uploads.addElement(u);
@@ -807,9 +927,15 @@ public final class Client implements Runnable {
             int active = 0;
             for (int i = 0; i < uploads.size(); i++) if (((Upload) uploads.elementAt(i)).active()) active++;
             if (active >= uploadSlots) return;
-            for (int i = 0; i < uploads.size(); i++) {
-                Upload u = (Upload) uploads.elementAt(i);
-                if (u.state == Upload.QUEUED) { next = u; break; }
+            // buddies first; one file at a time per person so one big queue can't hog the slots
+            for (int pass = 0; pass < 2 && next == null; pass++) {
+                for (int i = 0; i < uploads.size(); i++) {
+                    Upload u = (Upload) uploads.elementAt(i);
+                    if (u.state != Upload.QUEUED || (pass == 0 && !buddies.contains(u.user))) continue;
+                    if (activeUploadTo(u.user)) continue;
+                    next = u;
+                    break;
+                }
             }
             if (next == null) return;
             next.state = Upload.OFFERED;
@@ -1002,10 +1128,12 @@ public final class Client implements Runnable {
     void onPeer(PeerConn p, int code, Rd r) throws IOException {
         switch (code) {
         case 4: { // GetShareFileList
-            byte[] list = shares.enabled ? shares.listResponse() : Util.zlibStore(new byte[12], 12);
+            boolean ok = shares.enabled && !banned.contains(p.user);
+            byte[] list = ok ? shares.listResponse() : Util.zlibStore(new byte[12], 12);
             log(p.user + " is browsing your shares");
             p.send(new Msg().raw(list).frame(5));
-            log("Sent " + p.user + " your file list (" + (shares.enabled ? shares.files() : 0) + " files, " + list.length + " bytes)");
+            log("Sent " + p.user + " your file list (" + (ok ? shares.files() : 0) + " files, " + list.length + " bytes)"
+                + (banned.contains(p.user) ? ", empty: banned" : ""));
             break;
         }
         case 5: { // SharedFileListResponse (we asked to browse them)
@@ -1054,7 +1182,7 @@ public final class Client implements Runnable {
         case 36: { // FolderContentsRequest
             int tok = r.u32();
             String folder = r.str();
-            byte[] z = shares.enabled ? shares.folderResponse(tok, folder) : new Msg().u32(tok).str(folder).u32(0).zlib().toRaw();
+            byte[] z = shares.enabled && !banned.contains(p.user) ? shares.folderResponse(tok, folder) : new Msg().u32(tok).str(folder).u32(0).zlib().toRaw();
             p.send(new Msg().raw(z).frame(37));
             break;
         }
@@ -1220,6 +1348,17 @@ public final class Client implements Runnable {
         return t;
     }
 
+    /** Download into a subfolder of the save location (whole-folder downloads keep their folder). */
+    public Transfer downloadInto(Result r, String folder) {
+        Transfer t = transferByFile(r.user, r.file);
+        if (t == null || (t.state != Transfer.DONE && !t.active() && t.done == 0)) {
+            if (t == null) { t = new Transfer(r.user, r.file, r.size); t.subdir = folder; transfers.addElement(t); }
+            else if (t.subdir == null) t.subdir = folder;
+        }
+        queue(t);
+        return t;
+    }
+
     public Transfer download(Result r) {
         Transfer t = transferByFile(r.user, r.file);
         if (t == null) {
@@ -1257,6 +1396,29 @@ public final class Client implements Runnable {
                 changed(t);
             }
         }).start();
+    }
+
+    /** Failed downloads retry on their own: 2, 4, 8 ... up to 30 min apart, 20 tries. */
+    private void retryFailed() {
+        long now = System.currentTimeMillis();
+        Vector v = new Vector();
+        synchronized (transfers) {
+            for (int i = 0; i < transfers.size(); i++) {
+                Transfer t = (Transfer) transfers.elementAt(i);
+                if (t.state != Transfer.FAILED || t.cancelled) { t.failedAt = 0; continue; }
+                if (t.failedAt == 0) { t.failedAt = now; continue; }
+                if (t.retries >= 20) continue;
+                long wait = Math.min(30, 2L << Math.min(t.retries, 4)) * 60000L;
+                if (now - t.failedAt >= wait) v.addElement(t);
+            }
+        }
+        for (int i = 0; i < v.size(); i++) {
+            Transfer t = (Transfer) v.elementAt(i);
+            t.retries++;
+            t.failedAt = 0;
+            t.step("Auto-retry " + t.retries);
+            queue(t);
+        }
     }
 
     public void askPlace(final Transfer t) {

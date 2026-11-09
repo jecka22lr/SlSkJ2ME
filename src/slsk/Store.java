@@ -16,11 +16,28 @@ final class Store {
         final FileConnection fc;
         OutputStream os;
         final long offset;
-        final String name, where, url;
+        final String name, where, dir;
+        /** Where the data is going right now (the .part file while unfinished). */
+        String url;
+        final boolean part;
 
-        Sink(FileConnection fc, long offset, String name, String where, String url) throws IOException {
-            this.fc = fc; this.offset = offset; this.name = name; this.where = where; this.url = url;
+        Sink(FileConnection fc, long offset, String dir, String name, String url, boolean part) throws IOException {
+            this.fc = fc; this.offset = offset; this.dir = dir; this.name = name; this.url = url; this.part = part;
+            this.where = dir + name + (part ? PART : "");
             os = fc.openOutputStream(offset);
+        }
+
+        /** Download complete: drop the .part suffix (picks "name (2).ext" if the name is taken). Returns the final URL. */
+        String finish() throws IOException {
+            try { os.flush(); } catch (Throwable e) {}
+            try { os.close(); } catch (Throwable e) {}
+            if (!part) { fc.close(); return url; }
+            String target = name;
+            for (int n = 2; n < 100 && exists(dir + Util.urlEscape(target)); n++) target = numbered(name, n);
+            fc.rename(target);
+            fc.close();
+            url = dir + Util.urlEscape(target);
+            return url;
         }
 
         void write(byte[] b, int off, int len) throws IOException { os.write(b, off, len); }
@@ -39,27 +56,64 @@ final class Store {
     }
 
     /** Open (or resume) the download file. Falls back to the phone's music folder if denied. */
+    static final String PART = ".part";
+
+    static String numbered(String name, int n) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) + " (" + n + ")" + name.substring(dot) : name + " (" + n + ")";
+    }
+
+    private static boolean exists(String url) { return sizeOf(url) >= 0; }
+
+    /** Where a finished download most likely is, for downloads saved before we recorded paths. */
+    static String guessPath(String dir, Transfer t) {
+        if (!dir.endsWith("/")) dir += "/";
+        if (t.subdir != null && t.subdir.length() > 0) dir += Util.urlEscape(Util.safeName(t.subdir)) + "/";
+        return dir + Util.urlEscape(Util.safeName(Util.baseName(t.file)));
+    }
+
     static Sink open(String dir, Transfer t) throws IOException {
+        if (!dir.endsWith("/")) dir += "/";
+        if (t.subdir != null && t.subdir.length() > 0) dir += Util.urlEscape(Util.safeName(t.subdir)) + "/";
         String name = Util.safeName(Util.baseName(t.file));
         try {
-            return openIn(dir, name);
+            return openIn(dir, name, t.size);
         } catch (SecurityException e) {
             String alt = fallbackDir();
             if (alt != null && !alt.equals(dir)) {
-                try { return openIn(alt, name); } catch (SecurityException e2) {}
+                try { return openIn(alt, name, t.size); } catch (SecurityException e2) {}
             }
             throw new IOException("phone denied file permission for " + dir);
         }
     }
 
-    private static Sink openIn(String dir, String name) throws IOException {
+    private static long sizeOf(String url) {
+        long n = -1;
+        FileConnection f = null;
+        try {
+            f = (FileConnection) Connector.open(url, Connector.READ);
+            if (f.exists()) n = f.fileSize();
+        } catch (Throwable e) {
+            n = -1;
+        }
+        if (f != null) { try { f.close(); } catch (Throwable e) {} }
+        return n;
+    }
+
+    private static Sink openIn(String dir, String name, long size) throws IOException {
         if (!dir.endsWith("/")) dir += "/";
         ensureDir(dir);
-        String url = dir + Util.urlEscape(name);
+        // unfinished data lives in "name.part"; older versions wrote straight to "name", so resume that if it's there
+        String full = dir + Util.urlEscape(name);
+        long have = sizeOf(full);
+        // a smaller file is an old-style partial download; same size means it's already done;
+        // bigger is some other file with that name, so download next to it
+        boolean part = have < 0 || have > size;
+        String url = part ? full + Util.urlEscape(PART) : full;
         FileConnection fc = (FileConnection) Connector.open(url, Connector.READ_WRITE);
         try {
             if (!fc.exists()) fc.create();
-            return new Sink(fc, fc.fileSize(), name, dir + name, url);
+            return new Sink(fc, fc.fileSize(), dir, name, url, part);
         } catch (IOException e) {
             fc.close();
             throw e;

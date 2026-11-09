@@ -1,5 +1,25 @@
 # Changelog
 
+## Beta 0.5.0
+
+- Buddies (main menu): add people, see who's online, get a ticker + vibrate when a buddy comes
+  online or goes offline. Buddies go to the front of your upload queue. Search all buddies' files at once
+- Ignore hides someone's room lines and private messages. Ban refuses their downloads ("Banned"),
+  gives them an empty file list and no search results. Both from the user menu; undo under Buddies > Blocked
+- Search: Recent searches (Search > History), Search this room (in a chat room), and More filters
+  (Results > Filter > More): minimum bitrate, minimum size, words to hide. Filters are remembered
+- Whole-folder downloads go into a subfolder named after the folder
+- Unfinished downloads are saved as "name.part" and renamed when done; if the name is taken the file
+  becomes "name (2).ext". Downloads started by older versions still resume
+- Failed downloads retry on their own: after 2, 4, 8, 16, then every 30 minutes, up to 20 times
+- My downloads > Play opens a finished file in the phone's own player
+- Profile & sharing: max files per person (default 50), upload and download speed limits in KB/s.
+  Uploads go one file at a time per person so one big queue can't hold every slot
+- The share scan is saved, so logging in doesn't walk the whole shared folder again (Rescan refreshes it).
+  Finished downloads keep it up to date
+- Filenames that aren't valid UTF-8 (older Windows clients) are shown as Latin-1 and the original
+  bytes are sent back, so those files download instead of failing with "File not shared"
+
 ## Beta 0.4.2
 
 - Uploads keep a step-by-step trace like downloads (Uploads > Details > Steps): queued, offered,

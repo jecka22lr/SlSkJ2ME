@@ -27,6 +27,14 @@ The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see
 - User profiles (with picture), browse anyone's files, search one user's files, download whole folders
 - Wishlist: saved searches that run on the server's schedule
 - Profile text and online/away status
+- Buddies: online/offline alerts, buddies skip your upload queue, search all buddies' files at once
+- Ignore (hides their chat and messages) and ban (no browsing, downloads or search results from you)
+- Search history, room search, and filters for minimum bitrate, minimum size and words to hide
+- Whole-folder downloads land in their own subfolder; unfinished files are `.part` until done
+- Failed downloads retry by themselves (2, 4, 8... up to 30 min apart)
+- Play a finished download in the phone's own music player
+- Upload/download speed limits and a cap on files per person; the share scan is saved between logins
+- Filenames from old clients that aren't UTF-8 show readably and still download
 
 Uploads only reach people with an open port when you're on mobile data (you can't accept incoming
 connections behind carrier NAT). Big share lists may not fit in phone memory when browsing.
@@ -57,7 +65,9 @@ adds the StackMap attributes CLDC needs, replacing the old WTK preverifier.
 Runs on a desktop JVM with a small shim standing in for the phone's sockets and filesystem:
 MD5 and the zlib decoder against the JDK, the writable-folder fallback, and a full
 login, search, download and resume against `test/mock.py` (a mock server plus one peer), and
-`test/mock2.py` for rooms, PMs, profiles, browsing both ways, wishlist, distributed search and uploads.
+`test/mock2.py` for rooms, PMs, profiles, browsing both ways, wishlist, distributed search, uploads,
+buddies, ignore/ban and room/buddy search. `NewT` covers `.part` files, folders, the speed limiter,
+the share cache and the non-UTF-8 filename fallback.
 
 ## Emulator screenshots
 
@@ -74,7 +84,8 @@ server, so screens can be checked without a phone. See `test/emu/README.md`.
 | `PeerConn.java` | Peer connections: PierceFirewall / PeerInit, messages ("P") and file data ("F") |
 | `Inflate.java` | zlib decoder (search results are compressed, CLDC has no java.util.zip) |
 | `MD5.java` | Login hash |
-| `Store.java` | JSR-75 file writing, resume, writable-folder search |
+| `Store.java` | JSR-75 file writing, `.part` files and resume, writable-folder search |
+| `Throttle.java` | Upload/download speed limit |
 | `SlskMIDlet.java` | LCDUI front end, settings in RMS |
 | `Msg.java`, `Rd.java`, `Util.java` | Little-endian message building/parsing, helpers |
 

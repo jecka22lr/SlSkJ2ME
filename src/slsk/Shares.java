@@ -1,5 +1,7 @@
 package slsk;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Enumeration;
 import java.util.Hashtable;
@@ -76,6 +78,7 @@ final class Shares {
                     subdirs.addElement(name.substring(0, name.length() - 1));
                     continue;
                 }
+                if (name.endsWith(Store.PART)) continue; // unfinished download
                 long size = -1;
                 String furl = url + Util.urlEscape(name);
                 String why = null;
@@ -152,6 +155,48 @@ final class Shares {
         e.size = size;
         cachedList = null;
         return true;
+    }
+
+    synchronized String root() { return rootUrl; }
+
+    /** Save the scan so the next login doesn't have to walk the whole folder again. */
+    synchronized void writeCache(DataOutputStream o) throws IOException {
+        o.writeInt(1); // format
+        o.writeUTF(rootUrl == null ? "" : rootUrl);
+        o.writeUTF(rootName == null ? "" : rootName);
+        o.writeInt(dirs);
+        o.writeInt(entries.size());
+        for (int i = 0; i < entries.size(); i++) {
+            Entry e = (Entry) entries.elementAt(i);
+            o.writeUTF(e.url.startsWith(rootUrl) ? e.url.substring(rootUrl.length()) : e.url);
+            o.writeUTF(e.vpath.startsWith(rootName) ? e.vpath.substring(rootName.length()) : e.vpath);
+            o.writeLong(e.size);
+        }
+    }
+
+    /** Load a saved scan of root. Returns the file count, or -1 if there's none for that folder. */
+    int readCache(DataInputStream in, String root) throws IOException {
+        if (!root.endsWith("/")) root += "/";
+        if (in.readInt() != 1) return -1;
+        String ru = in.readUTF(), rn = in.readUTF();
+        if (!ru.equals(root)) return -1;
+        int nd = in.readInt(), n = in.readInt();
+        Vector out = new Vector(n);
+        Hashtable h = new Hashtable();
+        for (int i = 0; i < n; i++) {
+            Entry e = new Entry();
+            e.url = ru + in.readUTF();
+            e.vpath = rn + in.readUTF();
+            e.lower = e.vpath.toLowerCase();
+            e.size = in.readLong();
+            out.addElement(e);
+            h.put(e.vpath, e);
+        }
+        synchronized (this) {
+            entries = out; byPath = h; dirs = nd; cachedList = null; rootUrl = ru; rootName = rn;
+            skipped = 0; firstError = null;
+        }
+        return n;
     }
 
     /** Soulseek-style match: every word must appear, "-word" excludes. */

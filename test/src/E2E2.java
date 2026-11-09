@@ -2,7 +2,7 @@ package slsk;
 import java.util.Vector;
 public class E2E2 implements Client.Listener {
   volatile boolean in; volatile int ok;
-  volatile Object browse; volatile UserInfo info; volatile int wish, roomMsgs; volatile boolean pm, upDone, reconnected;
+  volatile Object browse; volatile UserInfo info; volatile int wish, roomMsgs; volatile boolean pm, upDone, reconnected; volatile String buddyEv;
   public void loggedIn(boolean o, String m) { in = o; }
   public void disconnected(String w) { System.out.println("UI disconnected " + w); }
   public void result(Result r) {}
@@ -16,6 +16,7 @@ public class E2E2 implements Client.Listener {
       case Client.EV_BROWSE: browse = b; break;
       case Client.EV_WISH: wish++; System.out.println("UI wish " + ((Result) a).file); break;
       case Client.EV_UPLOAD: Upload u = (Upload) a; System.out.println("UI upload " + u.label() + " " + u.info); if (u.state == Upload.DONE) upDone = true; break;
+      case Client.EV_BUDDY: buddyEv = ((UserInfo) a).user + ":" + ((UserInfo) a).status; System.out.println("UI buddy " + buddyEv); break;
       case Client.EV_CONN: System.out.println("UI conn " + a); if ("Reconnected".equals(a)) reconnected = true; break;
       case Client.EV_ROOMLIST: System.out.println("UI rooms " + ((Client) null == null ? "" : "")); break;
     }
@@ -34,6 +35,8 @@ public class E2E2 implements Client.Listener {
     Client c = new Client(ui, "jecka", "pw", "127.0.0.1", 22520, 0, "file:///E:/Soulseek/");
     c.description = "phone gang";
     c.wishlist.addElement("rare album");
+    c.buddies.addElement("buddy1");
+    c.setIgnored("spammer", true);
     c.connect();
     waitFor(() -> ui.in, "login");
     waitFor(() -> c.roomNames.length == 3, "room list");
@@ -54,6 +57,14 @@ public class E2E2 implements Client.Listener {
     System.out.println("E2E2 ok browse parse");
     System.out.println("scanned " + c.scanShares("file:///E:/Share/"));
     waitFor(() -> ui.upDone, "upload to searcher");
+    c.setBanned("searcher", true);
+    waitFor(() -> "buddy1:0".equals(ui.buddyEv), "buddy went offline event");
+    Room nk = (Room) c.rooms.get("nokia");
+    for (int i = 0; i < nk.lines.size(); i++) if (String.valueOf(nk.lines.elementAt(i)).indexOf("spammer") >= 0) throw new Error("ignored user's line shown");
+    System.out.println("E2E2 ok ignored user hidden");
+    c.roomSearch("nokia", "tape");
+    c.buddySearch("demo");
+    Thread.sleep(2500); // let the banned searcher try again
     c.say("nokia", "drop me");
     long until = System.currentTimeMillis() + 20000;
     while (!ui.reconnected && System.currentTimeMillis() < until) Thread.sleep(100);

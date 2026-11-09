@@ -27,6 +27,7 @@ public class FileSystemRegistry {
           if (a == null) return new FileOutputStream(f);
           final RandomAccessFile r = new RandomAccessFile(f, "rw"); r.seek((Long) a[0]);
           return new OutputStream() { public void write(int b) throws IOException { r.write(b); } public void write(byte[] b, int o, int l) throws IOException { r.write(b, o, l); } public void close() throws IOException { r.close(); } };
+        case "rename": { File n = new File(f.getParentFile(), (String) a[0]); f.renameTo(n); cur[0] = n; return null; }
         case "setFileConnection": { String n = (String) a[0]; cur[0] = n.equals("..") ? f.getParentFile() : new File(f, n.endsWith("/") ? n.substring(0, n.length() - 1) : n); return null; }
         default: return null; } });
   }

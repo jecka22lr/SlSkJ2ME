@@ -6,17 +6,58 @@ import java.io.InputStream;
 final class Util {
     private Util() {}
 
+    /**
+     * Strings that arrived as non-UTF-8 bytes (old Windows clients send Latin-1/CP1252 names).
+     * We show them decoded as Latin-1 but must send the original bytes back, or the peer
+     * won't recognise the file name. Bounded so it can't grow forever.
+     */
+    private static final java.util.Hashtable rawNames = new java.util.Hashtable();
+
     static byte[] utf8(String s) {
+        byte[] raw = (byte[]) rawNames.get(s);
+        if (raw != null) return raw;
         try { return s.getBytes("UTF-8"); }
         catch (Exception e) { return s.getBytes(); }
     }
 
+    /** The original bytes if s came in as non-UTF-8, else null (for saving the download list). */
+    static byte[] rawBytes(String s) { return (byte[]) rawNames.get(s); }
+
+    static void rememberRaw(String s, byte[] raw) {
+        if (rawNames.size() > 3000) rawNames.clear();
+        rawNames.put(s, raw);
+    }
+
+    static boolean validUtf8(byte[] b, int off, int len) {
+        int end = off + len;
+        for (int i = off; i < end; ) {
+            int c = b[i] & 0xff;
+            int n = c < 0x80 ? 0 : c >= 0xc2 && c <= 0xdf ? 1 : c >= 0xe0 && c <= 0xef ? 2 : c >= 0xf0 && c <= 0xf4 ? 3 : -1;
+            if (n < 0 || i + n > end - 1) return false;
+            for (int k = 1; k <= n; k++) if ((b[i + k] & 0xc0) != 0x80) return false;
+            i += n + 1;
+        }
+        return true;
+    }
+
+    static String latin1(byte[] b, int off, int len) {
+        char[] cs = new char[len];
+        for (int i = 0; i < len; i++) cs[i] = (char) (b[off + i] & 0xff);
+        return new String(cs);
+    }
+
     static String decode(byte[] b, int off, int len) {
+        if (!validUtf8(b, off, len)) {
+            String s = latin1(b, off, len);
+            byte[] raw = new byte[len];
+            System.arraycopy(b, off, raw, 0, len);
+            rememberRaw(s, raw);
+            return s;
+        }
         try {
             return new String(b, off, len, "UTF-8");
         } catch (Exception e) {
-            try { return new String(b, off, len, "ISO8859_1"); }
-            catch (Exception e2) { return new String(b, off, len); }
+            return latin1(b, off, len);
         }
     }
 

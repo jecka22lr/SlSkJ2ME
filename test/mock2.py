@@ -53,6 +53,7 @@ def server(c):
             room, _ = rstr(p, 0)
             if st.get('dropped'): ok('reconnect_rejoin', room == 'nokia')
             c.sendall(frame(14, s(room) + struct.pack('<I', 2) + s('peer1') + s('jecka')))
+            c.sendall(frame(13, s(room) + s('spammer') + s('buy my stuff')))  # ignored by the client
             c.sendall(frame(13, s(room) + s('peer1') + s('welcome to ' + room)))
         elif code == 13:
             room, o = rstr(p, 0); msg, _ = rstr(p, o)
@@ -69,6 +70,17 @@ def server(c):
         elif code == 5:
             u, _ = rstr(p, 0)
             c.sendall(frame(5, s(u) + b'\x01' + struct.pack('<IIQII', 2, 5000, 10, 1234, 56) + s('PT')))
+            if u == 'buddy1' and not st.get('buddy_sent'):
+                st['buddy_sent'] = True; ok('watch_buddy')
+                def later(cc=c):
+                    time.sleep(1.0); cc.sendall(frame(7, s('buddy1') + struct.pack('<I', 0) + b'\x00'))  # goes offline
+                threading.Thread(target=later, daemon=True).start()
+        elif code == 120:
+            room, o = rstr(p, 0); tok, = struct.unpack_from('<I', p, o); q, _ = rstr(p, o + 4)
+            ok('room_search', room == 'nokia' and q == 'tape')
+        elif code == 42:
+            u, o = rstr(p, 0); tok, = struct.unpack_from('<I', p, o); q, _ = rstr(p, o + 4)
+            if u == 'buddy1': ok('buddy_search', q == 'demo')
         elif code == 3:
             u, _ = rstr(p, 0)
             c.sendall(frame(3, s(u) + LO + struct.pack('<I', ADDR.get(u, 0))))
@@ -117,10 +129,20 @@ def searcher(c):  # stranger: receives our search result, browses us, asks profi
             k = c.recv(65536)
             if not k: break
             data += k
-        ok('upload_data', data == SHARED); c.close(); return
+        ok('upload_data', data == SHARED); c.close()
+        # by now the client has banned us: asking again and browsing must be refused
+        time.sleep(1.5)
+        pc = st.get('spconn')
+        if pc:
+            pc.sendall(frame(43, s(st['sname'])))
+            pc.sendall(frame(4, b''))
+        return
+    st['spconn'] = c
     while True:
         code, p = rmsg(c)
-        if code == 9:
+        if code == 50:
+            fn, o = rstr(p, 0); why, _ = rstr(p, o); ok('ban_denies_download', why == 'Banned')
+        elif code == 9:
             body = zlib.decompress(p)
             un, o = rstr(body, 0); tok, n = struct.unpack_from('<II', body, o); o += 8
             names = []
@@ -131,11 +153,14 @@ def searcher(c):  # stranger: receives our search result, browses us, asks profi
             ok('search_reply', un == 'jecka' and tok == 777 and names == ['Share\\Album\\02 Song.mp3'])
             c.sendall(frame(4, b''))
             c.sendall(frame(15, b''))
+            st['sname'] = names[0]
             c.sendall(frame(43, s(names[0])))
         elif code == 5:
             body = zlib.decompress(p); nd, = struct.unpack_from('<I', body)
             d1, _ = rstr(body, 4)
-            ok('browse_us', nd == 2 and d1.startswith('Share')); print('SEARCHER browse dirs', nd, d1, flush=True)
+            if st.get('browsed'): ok('ban_empty_browse', nd == 0)
+            else: ok('browse_us', nd == 2 and d1.startswith('Share'))
+            st['browsed'] = True; print('SEARCHER browse dirs', nd, flush=True)
         elif code == 16:
             desc, _ = rstr(p, 0); ok('our_profile', desc == 'phone gang')
         elif code == 40:
@@ -150,7 +175,7 @@ def accept_loop():
         cc = ls.accept()[0]
         threading.Thread(target=server, args=(cc,), daemon=True).start()
 threading.Thread(target=accept_loop, daemon=True).start()
-need = ['reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
+need = ['watch_buddy','room_search','buddy_search','ban_denies_download','ban_empty_browse','reconnect_login','reconnect_rejoin','pm_acked','share_counts','room_say','pm_sent','wishlist_search','parent_joined','distrib_init','search_reply','browse_us','our_profile','transfer_request','upload_token','upload_data']
 t0 = time.time()
 while time.time() - t0 < float(sys.argv[1]) and not all(k in checks for k in need): time.sleep(0.2)
 missing = [k for k in need if k not in checks]

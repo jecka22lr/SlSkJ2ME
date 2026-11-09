@@ -61,7 +61,17 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     private Form connF;
 
     private static final String[] MENU = { "Search", "Results", "My downloads", "Uploads", "Chat rooms", "Messages",
-        "Find user", "Wishlist", "Profile & sharing", "Log", "Save location", "About", "Log out" };
+        "Find user", "Buddies", "Wishlist", "Profile & sharing", "Log", "Save location", "About", "Log out" };
+    private final Command cPlay = new Command("Play", "Play / open file", Command.ITEM, 1);
+    private final Command cHistory = new Command("History", "Recent searches", Command.SCREEN, 2);
+    private final Command cMore = new Command("More", "More filters", Command.SCREEN, 3);
+    private List historyL;
+    private final Vector history = new Vector();
+    private Form moreF;
+    private TextField fMinBr, fMinMb, fExclude;
+    private int minBitrate;
+    private long minSize;
+    private String[] excludeWords = new String[0];
     private SocialUI social;
     private String[] settings;
     private final Command cUser = new Command("User", Command.ITEM, 3);
@@ -88,6 +98,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         started = true;
         display = Display.getDisplay(this);
         social = new SocialUI(this, display);
+        loadStrings("slskme-hist", history);
+        loadFilters();
         buildLogin();
         logF = new Form("Log");
         logF.addCommand(cBack);
@@ -123,6 +135,9 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         social.shareDir = s[7];
         social.sharing = "1".equals(s[8]);
         social.slots = s[9];
+        social.upLimit = s[10];
+        social.downLimit = s[11];
+        social.perUser = s[12];
         loginF = new Form("SlskME");
         fUser = new TextField("Username", s[0], 30, TextField.ANY | TextField.NON_PREDICTIVE);
         fPass = new TextField("Password", s[1], 30, TextField.PASSWORD);
@@ -155,6 +170,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         searchTB.addCommand(cGo);
         searchTB.addCommand(cBack);
         searchTB.addCommand(cDl);
+        searchTB.addCommand(cHistory);
         searchTB.setCommandListener(this);
 
         resL = new List("Results", List.IMPLICIT);
@@ -169,6 +185,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
 
         dlL = new List("My downloads", List.IMPLICIT);
         dlL.setSelectCommand(cInfo);
+        dlL.addCommand(cPlay);
         dlL.addCommand(cRetry);
         dlL.addCommand(cPlace);
         dlL.addCommand(cRemove);
@@ -193,7 +210,9 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         mainL.set(3, "Uploads (" + social.activeUploads() + ")", null);
         int pm = social.unreadPMs();
         mainL.set(5, pm > 0 ? "Messages (" + pm + " new)" : "Messages", null);
-        mainL.set(7, "Wishlist (" + client.wishResults.size() + " found)", null);
+        int on = social.buddiesOnline();
+        mainL.set(7, client.buddies.size() == 0 ? "Buddies" : "Buddies (" + on + "/" + client.buddies.size() + " online)", null);
+        mainL.set(8, "Wishlist (" + client.wishResults.size() + " found)", null);
     }
 
     void showMain() {
@@ -418,7 +437,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         fRemember.getSelectedFlags(rem);
         saveSettings(new String[] { fUser.getString().trim(), rem[0] ? fPass.getString() : "",
             fHost.getString().trim(), fPort.getString().trim(), fListen.getString().trim(), fDir.getString().trim(),
-            social.description, social.shareDir, social.sharing ? "1" : "0", social.slots });
+            social.description, social.shareDir, social.sharing ? "1" : "0", social.slots,
+            social.upLimit, social.downLimit, social.perUser });
     }
 
     private void useFolder(String d) {
@@ -457,6 +477,110 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         }).start();
     }
 
+    private final Command cOkMore = new Command("OK", Command.OK, 1);
+
+    private void runSearch(String q) {
+        history.removeElement(q);
+        history.insertElementAt(q, 0);
+        while (history.size() > 15) history.removeElementAt(history.size() - 1);
+        saveHistory();
+        clearResults("Results: " + q);
+        lastQuery = q;
+        client.search(q);
+        display.setCurrent(resL);
+    }
+
+    private void showMoreFilters() {
+        moreF = new Form("More filters");
+        fMinBr = new TextField("Min bitrate (kbps, 0 = any)", minBitrate > 0 ? "" + minBitrate : "", 4, TextField.NUMERIC);
+        fMinMb = new TextField("Min size (MB, 0 = any)", minSize > 0 ? "" + (minSize / 1048576L) : "", 5, TextField.NUMERIC);
+        StringBuffer ex = new StringBuffer();
+        for (int k = 0; k < excludeWords.length; k++) ex.append(k > 0 ? " " : "").append(excludeWords[k]);
+        fExclude = new TextField("Hide files with these words", ex.toString(), 100, TextField.ANY);
+        moreF.append(fMinBr);
+        moreF.append(fMinMb);
+        moreF.append(fExclude);
+        moreF.append(new StringItem(null, "Files with unknown bitrate still show. Kept until you change them."));
+        moreF.addCommand(cOkMore);
+        moreF.addCommand(cBack);
+        moreF.setCommandListener(this);
+        display.setCurrent(moreF);
+    }
+
+    static String[] words(String s) {
+        Vector v = new Vector();
+        int i = 0;
+        while (i < s.length()) {
+            while (i < s.length() && s.charAt(i) == ' ') i++;
+            int j = i;
+            while (j < s.length() && s.charAt(j) != ' ') j++;
+            if (j > i) v.addElement(s.substring(i, j));
+            i = j;
+        }
+        String[] a = new String[v.size()];
+        v.copyInto(a);
+        return a;
+    }
+
+    /** Hand a finished download to the phone's own player (or whatever app opens that file type). */
+    private void play(Transfer t) {
+        if (t.state != Transfer.DONE) { alert("Play", "Not downloaded yet.", dlL); return; }
+        String url = t.path != null ? t.path : Store.guessPath(fDir.getString().trim(), t);
+        try {
+            if (platformRequest(url)) alert("Play", "Close SlskME to open the file. Downloads stop while it's closed.", dlL);
+        } catch (Throwable e) {
+            alert("Play", "The phone couldn't open " + Store.friendly(url) + ": " + e.getMessage()
+                + ". Open it from the phone's Music player or file manager.", dlL);
+        }
+    }
+
+    private void saveHistory() { saveStrings("slskme-hist", history); }
+
+    private void saveFilters() {
+        Vector v = new Vector();
+        v.addElement("" + minBitrate);
+        v.addElement("" + minSize);
+        StringBuffer ex = new StringBuffer();
+        for (int k = 0; k < excludeWords.length; k++) ex.append(k > 0 ? " " : "").append(excludeWords[k]);
+        v.addElement(ex.toString());
+        saveStrings("slskme-flt", v);
+    }
+
+    private void loadFilters() {
+        Vector v = new Vector();
+        loadStrings("slskme-flt", v);
+        if (v.size() < 3) return;
+        minBitrate = parse((String) v.elementAt(0), 0);
+        try { minSize = Long.parseLong((String) v.elementAt(1)); } catch (Exception e) {}
+        excludeWords = words((String) v.elementAt(2));
+    }
+
+    static void saveStrings(String store, Vector v) {
+        try {
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(bo);
+            out.writeInt(v.size());
+            for (int i = 0; i < v.size(); i++) out.writeUTF((String) v.elementAt(i));
+            byte[] b = bo.toByteArray();
+            RecordStore rs = RecordStore.openRecordStore(store, true);
+            if (rs.getNumRecords() > 0) rs.setRecord(1, b, 0, b.length);
+            else rs.addRecord(b, 0, b.length);
+            rs.closeRecordStore();
+        } catch (Exception e) {}
+    }
+
+    static void loadStrings(String store, Vector into) {
+        try {
+            RecordStore rs = RecordStore.openRecordStore(store, true);
+            if (rs.getNumRecords() > 0) {
+                DataInputStream in = new DataInputStream(new ByteArrayInputStream(rs.getRecord(1)));
+                int n = in.readInt();
+                for (int i = 0; i < n; i++) into.addElement(in.readUTF());
+            }
+            rs.closeRecordStore();
+        } catch (Exception e) {}
+    }
+
     private Transfer selectedTransfer() {
         int i = dlL.getSelectedIndex();
         return i >= 0 && i < shownDl.size() ? (Transfer) shownDl.elementAt(i) : null;
@@ -483,7 +607,8 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (c == cDirYes || c == cDirNo) {
             if (c == cDirYes && pendingDir != null && client != null) {
                 Vector v = ResultGroups.files(pendingDir, rowFilter);
-                for (int k = 0; k < v.size(); k++) client.download((Result) v.elementAt(k));
+                String sub = Util.baseName(pendingDir.path);
+                for (int k = 0; k < v.size(); k++) client.downloadInto((Result) v.elementAt(k), sub);
                 log("Queued " + v.size() + " files from " + ResultGroups.shortDir(pendingDir.path));
                 resDirty = true;
                 renderPage();
@@ -512,12 +637,13 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             case 4: social.showRooms(); break;
             case 5: social.showConvos(); break;
             case 6: social.findUser(); break;
-            case 7: social.showWishlist(); break;
-            case 8: social.showMyProfile(); break;
-            case 9: display.setCurrent(logF); break;
-            case 10: showFolders(); break;
-            case 11: showAbout(mainL); break;
-            case 12:
+            case 7: social.showBuddies(); break;
+            case 8: social.showWishlist(); break;
+            case 9: social.showMyProfile(); break;
+            case 10: display.setCurrent(logF); break;
+            case 11: showFolders(); break;
+            case 12: showAbout(mainL); break;
+            case 13:
                 saveQueue();
                 client.logout();
                 client = null;
@@ -526,6 +652,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                 break;
             }
         } else if (d == filterL) {
+            if (c == cMore) { showMoreFilters(); return; }
             if (c == List.SELECT_COMMAND) { filter = filterL.getSelectedIndex(); refilter(); }
             display.setCurrent(resL);
         } else if (d == folderL) {
@@ -558,9 +685,29 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (d == searchTB && c == cGo) {
             String q = searchTB.getString().trim();
             if (q.length() == 0) return;
-            clearResults("Results: " + q);
-            lastQuery = q;
-            client.search(q);
+            runSearch(q);
+        } else if (d == searchTB && c == cHistory) {
+            historyL = new List("Recent searches", List.IMPLICIT);
+            for (int k = 0; k < history.size(); k++) historyL.append((String) history.elementAt(k), null);
+            if (history.size() == 0) historyL.append("(none yet)", null);
+            historyL.addCommand(cRemove);
+            historyL.addCommand(cBack);
+            historyL.setCommandListener(this);
+            display.setCurrent(historyL);
+        } else if (d == historyL) {
+            int k = historyL.getSelectedIndex();
+            String q = k >= 0 && k < history.size() ? (String) history.elementAt(k) : null;
+            if (c == cBack) display.setCurrent(searchTB);
+            else if (c == cRemove && q != null) { history.removeElementAt(k); saveHistory(); historyL.delete(k); }
+            else if (c == List.SELECT_COMMAND && q != null) { searchTB.setString(q); runSearch(q); }
+        } else if (d == moreF) {
+            if (c == cOkMore) {
+                minBitrate = parse(fMinBr.getString(), 0);
+                minSize = parse(fMinMb.getString(), 0) * 1024L * 1024L;
+                excludeWords = words(fExclude.getString().toLowerCase());
+                saveFilters();
+                refilter();
+            }
             display.setCurrent(resL);
         } else if (d == resL) {
             int i = resL.getSelectedIndex();
@@ -591,6 +738,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
             } else if (c == cFilter) {
                 filterL = new List("Show", List.IMPLICIT, FILTERS, null);
                 filterL.setSelectedIndex(filter, true);
+                filterL.addCommand(cMore);
                 filterL.addCommand(cBack);
                 filterL.setCommandListener(this);
                 display.setCurrent(filterL);
@@ -615,6 +763,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         } else if (d == dlL) {
             Transfer t = selectedTransfer();
             if (c == cInfo && t != null) showInfo("Download", t.details(), dlL);
+            else if (c == cPlay && t != null) play(t);
             else if (c == cRetry && t != null) { client.queue(t); refreshDownloads(); }
             else if (c == cPlace && t != null) client.askPlace(t);
             else if (c == cRemove && t != null) { client.remove(t); refreshDownloads(); }
@@ -652,7 +801,9 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         client = new Client(this, u, p, fHost.getString().trim(), port, lp, dir);
         client.description = social.description;
         try { client.uploadSlots = Math.max(1, Math.min(4, Integer.parseInt(social.slots))); } catch (Exception e) {}
+        social.applyLimits(client);
         social.loadWishlist(client.wishlist);
+        social.loadPeople(client);
         connF = new Form("Connecting");
         connF.append("Logging in to " + fHost.getString() + "...");
         connF.addCommand(cCancel);
@@ -701,32 +852,57 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
                 Transfer t = (Transfer) v.elementAt(i);
                 out.writeUTF(t.user);
                 out.writeUTF(t.file);
+                byte[] raw = Util.rawBytes(t.file); // non-UTF-8 name: keep the exact bytes the peer knows
+                out.writeInt(raw == null ? 0 : raw.length);
+                if (raw != null) out.write(raw);
                 out.writeLong(t.size);
                 out.writeBoolean(t.state == Transfer.DONE);
+                out.writeUTF(t.path == null ? "" : t.path);
+                out.writeUTF(t.subdir == null ? "" : t.subdir);
             }
             byte[] b = bo.toByteArray();
-            RecordStore rs = RecordStore.openRecordStore("slskme-dl", true);
+            RecordStore rs = RecordStore.openRecordStore("slskme-dl2", true);
             if (rs.getNumRecords() > 0) rs.setRecord(1, b, 0, b.length);
             else rs.addRecord(b, 0, b.length);
             rs.closeRecordStore();
         } catch (Exception e) {}
     }
 
+    private static byte[] record(String store) {
+        try {
+            RecordStore rs = RecordStore.openRecordStore(store, true);
+            byte[] b = rs.getNumRecords() > 0 ? rs.getRecord(1) : null;
+            rs.closeRecordStore();
+            return b;
+        } catch (Exception e) { return null; }
+    }
+
     /** Puts back last session's downloads and re-queues the unfinished ones. */
     private void restoreQueue() {
         try {
-            RecordStore rs = RecordStore.openRecordStore("slskme-dl", true);
-            byte[] b = rs.getNumRecords() > 0 ? rs.getRecord(1) : null;
-            rs.closeRecordStore();
+            byte[] b = record("slskme-dl2");
+            boolean v2 = b != null;
+            if (!v2) b = record("slskme-dl"); // saved by 0.4.x
             if (b == null) return;
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(b));
             if (!in.readUTF().equals(client.username)) return;
             int n = in.readInt(), again = 0;
             for (int i = 0; i < n; i++) {
                 String user = in.readUTF(), file = in.readUTF();
+                if (v2) {
+                    int rl = in.readInt();
+                    if (rl > 0) {
+                        byte[] raw = new byte[rl];
+                        in.readFully(raw);
+                        Util.rememberRaw(file, raw);
+                    }
+                }
                 long size = in.readLong();
                 boolean done = in.readBoolean();
+                String path = v2 ? in.readUTF() : "", sub = v2 ? in.readUTF() : "";
                 Transfer t = client.restore(user, file, size, done);
+                if (path.length() > 0) t.path = path;
+                if (sub.length() > 0) t.subdir = sub;
                 if (!done) { client.queue(t); again++; }
             }
             if (again > 0) log("Resuming " + again + " download(s) from last time");
@@ -789,6 +965,12 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     }
 
     private boolean passes(Result r) {
+        if (minBitrate > 0 && r.bitrate > 0 && r.bitrate < minBitrate) return false;
+        if (minSize > 0 && r.size < minSize) return false;
+        if (excludeWords.length > 0) {
+            String f = r.file.toLowerCase();
+            for (int k = 0; k < excludeWords.length; k++) if (f.indexOf(excludeWords[k]) >= 0) return false;
+        }
         switch (filter) {
         case 1: return ext(r.file, ",mp3,");
         case 2: return ext(r.file, ",flac,");
@@ -814,7 +996,9 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
         int total = groups.total();
         int shownFiles = 0;
         if (filter != 0) for (int k = 0; k < rows.size(); k++) if (rows.elementAt(k) instanceof Result) shownFiles++;
-        String count = filter == 0 ? "" + total : shownFiles + "/" + total;
+        boolean any = filter != 0 || minBitrate > 0 || minSize > 0 || excludeWords.length > 0;
+        if (any && filter == 0) for (int k = 0; k < rows.size(); k++) if (rows.elementAt(k) instanceof Result) shownFiles++;
+        String count = !any ? "" + total : shownFiles + "/" + total;
         String pg = pages() > 1 ? "p" + (page + 1) + "/" + pages() + " " : "";
         resL.setTitle(pg + count + ": " + lastQuery);
     }
@@ -870,7 +1054,7 @@ public final class SlskMIDlet extends MIDlet implements CommandListener, Client.
     // ------------------------------------------------------------ settings (RMS)
 
     private String[] loadSettings() {
-        String[] s = { "", "", "server.slsknet.org", "2242", "0", null, "", "", "0", "1" };
+        String[] s = { "", "", "server.slsknet.org", "2242", "0", null, "", "", "0", "1", "0", "0", "50" };
         try {
             RecordStore rs = RecordStore.openRecordStore("slskme", true);
             if (rs.getNumRecords() > 0) {
