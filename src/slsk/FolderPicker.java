@@ -43,6 +43,7 @@ final class FolderPicker implements CommandListener {
 
     /** Opens at start (if it exists), else at the drive list. */
     void show(String start) {
+        if (start != null && start.toLowerCase().indexOf("/private/") >= 0) start = null; // don't open inside app storage
         d.setCurrent(l);
         load(start);
     }
@@ -75,12 +76,23 @@ final class FolderPicker implements CommandListener {
                         }
                     }
                     if (at == null) {
+                        // real drives (C:/, E:/) first; named roots some phones add are shortcuts
+                        Vector aliasN = new Vector(), aliasU = new Vector();
                         Enumeration e = FileSystemRegistry.listRoots();
                         while (e.hasMoreElements()) {
                             String r = (String) e.nextElement();
                             String ru = "file:///" + (r.endsWith("/") ? r : r + "/");
-                            names.addElement(Store.friendly(ru) + "  (" + r + ")");
-                            us.addElement(ru);
+                            if (r.length() >= 2 && r.charAt(1) == ':') {
+                                names.addElement(Store.friendly(ru) + "  (" + r + ")");
+                                us.addElement(ru);
+                            } else {
+                                aliasN.addElement(Util.decodeUrl(r) + "  (shortcut)");
+                                aliasU.addElement(ru);
+                            }
+                        }
+                        for (int i = 0; i < aliasN.size(); i++) {
+                            names.addElement(aliasN.elementAt(i));
+                            us.addElement(aliasU.elementAt(i));
                         }
                     }
                 } catch (SecurityException e) {
@@ -120,7 +132,9 @@ final class FolderPicker implements CommandListener {
             l.setTitle("Pick a drive");
         }
         for (int i = 0; i < names.size(); i++) {
-            l.append((at != null ? "[" + names.elementAt(i) + "]" : (String) names.elementAt(i)), null);
+            String n = (String) names.elementAt(i);
+            if (at != null && n.equalsIgnoreCase("private")) n = "Private (app storage, hidden)";
+            l.append((at != null ? "[" + n + "]" : n), null);
             urls.addElement(us.elementAt(i));
         }
         if (err != null) l.append("(" + err + ")", null);

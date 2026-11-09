@@ -1,5 +1,12 @@
 # Changelog
 
+## Alpha 0.3.2
+
+- Testing a save location no longer leaves empty "Soulseek" folders behind
+  (older versions created them in every folder they tried, including app-private storage)
+- Folder picker lists real drives (C:/, E:/) first; extra named roots some phones add are marked "(shortcut)"
+- Private folders are labelled "app storage, hidden" and are never picked automatically
+
 ## Alpha 0.3.1
 
 - Folder picker: browse drives and folders, go up, create a new folder.

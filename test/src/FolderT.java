@@ -9,4 +9,7 @@ public class FolderT { public static void main(String[] a) {
   System.out.println("default: " + Store.defaultDir() + " = " + Store.friendly(Store.defaultDir()));
   System.out.println("friendly: " + Store.friendly("file:///C:/Data/Sounds/My%20Music/") + " | " + Store.friendly("file:///E:/Images/Soulseek/"));
   if (!Store.friendly(Store.defaultDir()).equals("Memory card/Soulseek/")) throw new Error("friendly");
+  if (Store.probe("file:///E:/ProbeTest/") != null) throw new Error("probe failed");
+  if (new java.io.File("/tmp/slskfs/E:/ProbeTest").exists()) throw new Error("probe left a folder behind");
+  System.out.println("probe cleanup ok");
 }}

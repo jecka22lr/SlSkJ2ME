@@ -69,10 +69,13 @@ final class Store {
         }
     }
 
-    private static void ensureDir(String dir) throws IOException {
+    /** Creates dir if missing. Returns true if it had to create it. */
+    private static boolean ensureDir(String dir) throws IOException {
         FileConnection d = (FileConnection) Connector.open(dir, Connector.READ_WRITE);
         try {
-            if (!d.exists()) d.mkdir();
+            if (d.exists()) return false;
+            d.mkdir();
+            return true;
         } finally {
             d.close();
         }
@@ -80,7 +83,7 @@ final class Store {
 
     private static final String[] PROPS = { "fileconn.dir.memorycard", "fileconn.dir.music",
         "fileconn.dir.recordings", "fileconn.dir.tones", "fileconn.dir.videos", "fileconn.dir.photos",
-        "fileconn.dir.graphics", "fileconn.dir.private" };
+        "fileconn.dir.graphics" };
 
     /** Folders worth trying, most useful first. Unsigned apps often may only write in some. */
     static Vector candidates(String configured) {
@@ -168,7 +171,7 @@ final class Store {
     static String probe(String dir) {
         try {
             if (!dir.endsWith("/")) dir += "/";
-            ensureDir(dir);
+            boolean made = ensureDir(dir);
             FileConnection f = (FileConnection) Connector.open(dir + "slskme.tmp", Connector.READ_WRITE);
             try {
                 if (!f.exists()) f.create();
@@ -178,6 +181,13 @@ final class Store {
                 f.delete();
             } finally {
                 f.close();
+            }
+            // a test must not leave empty folders lying around; downloads recreate it when needed
+            if (made) {
+                try {
+                    FileConnection d = (FileConnection) Connector.open(dir, Connector.READ_WRITE);
+                    try { d.delete(); } finally { d.close(); }
+                } catch (Throwable e) {}
             }
             return null;
         } catch (SecurityException e) {
