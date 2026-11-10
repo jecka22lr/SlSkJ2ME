@@ -4,7 +4,10 @@ A Soulseek client for old Java phones. J2ME (CLDC 1.1 / MIDP 2.0 + JSR-75 FileCo
 no proxy server, talks to the real Soulseek network directly.
 
 Aimed at Nokia S60v3/v5 (N82, C6-00...), Nokia S40 with JSR-75, and Windows Mobile 6 Java runtimes.
-The jar is about 38 KB. I have 0 fucking clue if it works elsewhere, we will see about that later.
+The jar is about 38 KB. I have 0 fucking clue if it works EVERYWHERE, we will see about that.
+
+Nokia C6-00 - fully working.
+Sony Ericsson Cedar - fully working.
 
 Works on my Nokia C6-00. Your mileage may vary.
 
